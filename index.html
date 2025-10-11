@@ -1,0 +1,562 @@
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Motor 3D - Mode7 Unificado</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #333; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+<canvas id="glCanvas" width="1920" height="1080"></canvas>
+<script src="image64.js"></script>
+
+<script>
+// Spritesheet en base64 (placeholder)
+
+const canvas = document.getElementById('glCanvas');
+const gl = canvas.getContext('webgl2');
+
+// ======= Configuración =======
+const TILE_SIZE = 32;
+const MAP_WIDTH = 16;
+const MAP_HEIGHT = 16;
+let billboard_tiles = [4,3];
+let block_tiles = [5];
+const billboard_tiles_set = new Set(billboard_tiles);
+const block_tiles_set = new Set(block_tiles);
+let tile_items_size = 6;
+
+let image = new Image();
+const spriteTexture = gl.createTexture();
+
+image.onload = function() {
+  tile_items_size = Math.floor(image.width / TILE_SIZE);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.bindTexture(gl.TEXTURE_2D, spriteTexture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+};
+
+image.src = image_64;
+
+let tileMap = [
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,
+  1,2,1,1,2,3,4,3,3,3,3,3,3,3,2,3,
+  3,2,3,4,3,3,5,5,3,3,3,3,3,3,2,3,
+  3,2,3,3,3,3,3,5,3,3,3,3,3,3,2,3,
+  3,2,3,3,3,3,3,3,3,3,3,4,3,3,2,3,
+  3,2,3,3,5,3,3,3,1,1,1,1,1,1,2,1,
+  1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  2,2,2,2,5,5,5,5,5,5,5,5,5,5,5,5,
+  5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
+  5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
+  5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
+  5,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+];
+
+let camera = {
+  x: 8.0,
+  y: 4.76,
+  z: 1.0,
+  angle: 3.0
+};
+
+// ======= SHADER SUELO MODE7 =======
+const vsSource = `#version 300 es
+in vec2 a_position;
+out vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}
+`;
+
+const fsSource = `#version 300 es
+precision highp float;
+in vec2 v_texCoord;
+out vec4 outColor;
+
+uniform sampler2D u_spritesheet;
+uniform vec4 u_camera;
+uniform float u_spriteCount;
+uniform int u_tileMap[${MAP_WIDTH * MAP_HEIGHT}];
+
+void main() {
+  float angle = u_camera.w;
+  float cosA = cos(angle);
+  float sinA = sin(angle);
+
+  float horizon = 0.3;
+  float screenY = 1.0 - v_texCoord.y;
+  float perspective = u_camera.z / (screenY - horizon);
+
+  if (perspective < 0.0 || perspective > 500.0) {
+    discard;
+  }
+
+  float dx = (v_texCoord.x - 0.5);
+  float worldX = u_camera.x + (cosA * dx - sinA * 1.0) * perspective;
+  float worldY = u_camera.y + (sinA * dx + cosA * 1.0) * perspective;
+
+  int tileX = int(floor(worldX));
+  int tileY = int(floor(worldY));
+
+  if(tileX < 0 || tileY < 0 || tileX >= ${MAP_WIDTH} || tileY >= ${MAP_HEIGHT}) {
+    outColor = vec4(0.0, 0.0, 0.0, 1.0);
+    return;
+  }
+
+  int tileIndex = u_tileMap[tileY * ${MAP_WIDTH} + tileX];
+  if(tileIndex == 0) {
+    outColor = vec4(0.3, 0.3, 0.3, 1.0);
+    return;
+  }
+
+  float tx = fract(worldX);
+  float ty = fract(worldY);
+
+  float spriteWidth = 1.0 / u_spriteCount;
+  vec2 texCoord = vec2(tx * spriteWidth, ty);
+  texCoord.x += float(tileIndex - 1) * spriteWidth;
+
+  outColor = texture(u_spritesheet, texCoord);
+}
+`;
+
+// ======= SHADER BILLBOARDS =======
+const billboardVS = `#version 300 es
+in vec2 a_offset;
+uniform vec2 u_screenPos;
+uniform float u_size;
+out vec2 v_texCoord;
+void main() {
+  vec2 pos = u_screenPos + vec2(a_offset.x, a_offset.y + 1.0) * u_size;
+  gl_Position = vec4(pos * 2.0 - 1.0, 0.0, 1.0);
+  v_texCoord = (a_offset + 1.0) * 0.5;
+}
+`;
+
+const billboardFS = `#version 300 es
+precision highp float;
+in vec2 v_texCoord;
+out vec4 outColor;
+
+uniform sampler2D u_spritesheet;
+uniform int u_spriteIndex;
+uniform float u_spriteCount;
+
+void main() {
+  vec2 uv = v_texCoord;
+  uv.x /= u_spriteCount;
+  uv.x += float(u_spriteIndex - 1) / u_spriteCount;
+
+  vec4 color = texture(u_spritesheet, uv);
+  if (color.a < 0.1) discard;
+  outColor = color;
+}
+`;
+
+// ======= SHADER BLOQUES 3D CON PROYECCIÓN MODE7 =======
+const blockVS = `#version 300 es
+in vec3 a_position;    // Posición del vértice en el modelo del cubo
+in vec2 a_texCoord;
+
+uniform vec4 u_camera;      // (x, y, z, angle)
+uniform vec3 u_blockPos;    // Posición del bloque en el mundo 2D
+uniform vec2 u_resolution;
+
+out vec2 v_texCoord;
+out float v_depth;
+
+void main() {
+  // 1. Posición del vértice en el mundo
+  vec3 worldPos = a_position + u_blockPos;
+  
+  // 2. Calcular posición relativa a la cámara en 2D
+  // CLAVE: worldPos.z es la profundidad REAL de cada vértice
+  float dx = worldPos.x - u_camera.x;
+  float dy = worldPos.z - u_camera.y;
+  
+  // 3. Rotar según el ángulo de la cámara
+  float angle = u_camera.w;
+  float cosA = cos(-angle);
+  float sinA = sin(-angle);
+  
+  float rotX = dx * cosA - dy * sinA;
+  float rotY = dx * sinA + dy * cosA;
+  
+  // 4. Si está detrás de la cámara, descartarlo
+  if (rotY < 0.1) {
+    gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
+    v_texCoord = a_texCoord;
+    v_depth = -1.0;
+    return;
+  }
+  
+  // 5. Proyección Mode7 EXACTA (igual que el suelo)
+  float horizon = 0.3;
+  
+  // Componente horizontal
+  float screenX = 0.5 + rotX / rotY;
+  
+  // Componente vertical con altura de cámara
+  // Fórmula Mode7: screenY = 1.0 - (horizon + camZ/rotY - (vertexY - camZ)/rotY)
+  // Simplificado: screenY = 1.0 - horizon - vertexY/rotY + camZ/rotY - camZ/rotY
+  // = 1.0 - horizon - vertexY/rotY
+  // Pero necesitamos: screenY = 1.0 - (horizon + (camZ - vertexY)/rotY)
+  float screenY = 1.0 - (horizon + (u_camera.z - worldPos.y) / rotY);
+  
+  // 6. Convertir a NDC
+  gl_Position = vec4(
+    screenX * 2.0 - 1.0,
+    screenY * 2.0 - 1.0,
+    rotY / 50.0,  // Depth para z-buffer
+    1.0
+  );
+  
+  v_texCoord = a_texCoord;
+  v_depth = rotY;
+}
+`;
+
+const blockFS = `#version 300 es
+precision highp float;
+in vec2 v_texCoord;
+in float v_depth;
+out vec4 outColor;
+
+uniform sampler2D u_spritesheet;
+uniform int u_spriteIndex;
+uniform float u_spriteCount;
+
+void main() {
+  if (v_depth < 0.0) discard;
+  
+  float spriteWidth = 1.0 / u_spriteCount;
+  vec2 uv = vec2(v_texCoord.x * spriteWidth, v_texCoord.y);
+  uv.x += float(u_spriteIndex - 1) * spriteWidth;
+
+  vec4 color = texture(u_spritesheet, uv);
+  if (color.a < 0.1) discard;
+  outColor = color;
+}
+`;
+
+// ======= GEOMETRÍA CUBO =======
+// Cubo 1x1x1: X horizontal, Y vertical (altura), Z profundidad
+const cubeVertices = new Float32Array([
+  // Frente (hacia cámara, +Z)
+  -0.5, 0.0,  0.5,  0, 0,
+   0.5, 0.0,  0.5,  1, 0,
+   0.5, 1.0,  0.5,  1, 1,
+  -0.5, 0.0,  0.5,  0, 0,
+   0.5, 1.0,  0.5,  1, 1,
+  -0.5, 1.0,  0.5,  0, 1,
+
+  // Atrás (-Z)
+   0.5, 0.0, -0.5,  0, 0,
+  -0.5, 0.0, -0.5,  1, 0,
+  -0.5, 1.0, -0.5,  1, 1,
+   0.5, 0.0, -0.5,  0, 0,
+  -0.5, 1.0, -0.5,  1, 1,
+   0.5, 1.0, -0.5,  0, 1,
+
+  // Izquierda (-X)
+  -0.5, 0.0, -0.5,  0, 0,
+  -0.5, 0.0,  0.5,  1, 0,
+  -0.5, 1.0,  0.5,  1, 1,
+  -0.5, 0.0, -0.5,  0, 0,
+  -0.5, 1.0,  0.5,  1, 1,
+  -0.5, 1.0, -0.5,  0, 1,
+
+  // Derecha (+X)
+   0.5, 0.0,  0.5,  0, 0,
+   0.5, 0.0, -0.5,  1, 0,
+   0.5, 1.0, -0.5,  1, 1,
+   0.5, 0.0,  0.5,  0, 0,
+   0.5, 1.0, -0.5,  1, 1,
+   0.5, 1.0,  0.5,  0, 1,
+
+  // Arriba (+Y)
+  -0.5, 1.0,  0.5,  0, 0,
+   0.5, 1.0,  0.5,  1, 0,
+   0.5, 1.0, -0.5,  1, 1,
+  -0.5, 1.0,  0.5,  0, 0,
+   0.5, 1.0, -0.5,  1, 1,
+  -0.5, 1.0, -0.5,  0, 1,
+
+  // Abajo (Y=0)
+  -0.5, 0.0, -0.5,  0, 0,
+   0.5, 0.0, -0.5,  1, 0,
+   0.5, 0.0,  0.5,  1, 1,
+  -0.5, 0.0, -0.5,  0, 0,
+   0.5, 0.0,  0.5,  1, 1,
+  -0.5, 0.0,  0.5,  0, 1
+]);
+
+// ======= COMPILACIÓN SHADERS =======
+function createShader(gl, type, source) {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error('Shader error:', gl.getShaderInfoLog(shader));
+    throw new Error(gl.getShaderInfoLog(shader));
+  }
+  return shader;
+}
+
+function createProgram(gl, vsSource, fsSource) {
+  const vs = createShader(gl, gl.VERTEX_SHADER, vsSource);
+  const fs = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+  const program = gl.createProgram();
+  gl.attachShader(program, vs);
+  gl.attachShader(program, fs);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program error:', gl.getProgramInfoLog(program));
+    throw new Error(gl.getProgramInfoLog(program));
+  }
+  return program;
+}
+
+const program = createProgram(gl, vsSource, fsSource);
+const billboardProgram = createProgram(gl, billboardVS, billboardFS);
+const blockProgram = createProgram(gl, blockVS, blockFS);
+
+// ======= BUFFERS =======
+const positionBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+
+const billboardBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, billboardBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+
+const cubeBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, cubeBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, cubeVertices, gl.STATIC_DRAW);
+
+// ======= RECOLECTAR OBJETOS =======
+function collectRenderableObjects() {
+  const objects = [];
+  
+  for (let i = 0; i < tileMap.length; i++) {
+    const tile = tileMap[i];
+    const mapX = i % MAP_WIDTH;
+    const mapY = Math.floor(i / MAP_WIDTH);
+    
+    if (isBillboard(tile)) {
+      const x = mapX + 0.5;
+      const y = mapY + 0.5;
+      const dx = x - camera.x;
+      const dy = y - camera.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      
+      const proj = projectToScreen(x, y);
+      if (proj.visible) {
+        objects.push({
+          type: 'billboard',
+          x, y, tile, dist, proj
+        });
+      }
+    }
+    
+    if (isBlock(tile)) {
+      // Posición en el mundo:
+      const x = mapX + 0.5;
+      const y = 0.0; // Altura base del bloque
+      const z = mapY + 0.5;
+      
+      // Para el algoritmo del pintor, usar el punto MÁS LEJANO del cubo
+      // (el borde trasero superior)
+      const dx = x - camera.x;
+      const dz = (z + 0.5) - camera.y; // Borde trasero del cubo
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      
+      objects.push({
+        type: 'block',
+        x, y, z, tile, dist
+      });
+    }
+  }
+  
+  // Ordenar por distancia (algoritmo del pintor)
+  objects.sort((a, b) => b.dist - a.dist);
+  
+  return objects;
+}
+
+// ======= RENDER =======
+function render(time) {
+  updateCamera();
+  
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.clearColor(0.5, 0.7, 1.0, 1.0);
+  
+  // 1. Suelo (sin depth test)
+  gl.disable(gl.DEPTH_TEST);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  
+  gl.useProgram(program);
+  
+  const posLoc = gl.getAttribLocation(program, 'a_position');
+  gl.enableVertexAttribArray(posLoc);
+  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+  
+  gl.uniform1f(gl.getUniformLocation(program, 'u_spriteCount'), tile_items_size);
+  gl.uniform4f(gl.getUniformLocation(program, 'u_camera'), camera.x, camera.y, camera.z, camera.angle);
+  gl.uniform1iv(gl.getUniformLocation(program, 'u_tileMap[0]'), tileMap);
+  
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, spriteTexture);
+  gl.uniform1i(gl.getUniformLocation(program, 'u_spritesheet'), 0);
+  
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  
+  // Limpiar depth buffer antes de renderizar objetos 3D
+  gl.clear(gl.DEPTH_BUFFER_BIT);
+  
+  // 2. Recoger objetos
+  const objects = collectRenderableObjects();
+  
+  // Preparar blending para transparencias
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  
+  // 3. Renderizar objetos con algoritmo del pintor
+  // Pero habilitamos depth test para que las caras de los cubos se ordenen correctamente
+  
+  for (const obj of objects) {
+    if (obj.type === 'block') {
+      // Activar depth test solo para bloques (para evitar caras huecas)
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthFunc(gl.LESS);
+      gl.depthMask(true);
+      drawBlock(obj);
+    } else if (obj.type === 'billboard') {
+      // Desactivar depth test para billboards (usar solo algoritmo del pintor)
+      gl.disable(gl.DEPTH_TEST);
+      drawBillboard(obj);
+    }
+  }
+  
+  requestAnimationFrame(render);
+}
+
+function drawBlock(block) {
+  gl.useProgram(blockProgram);
+  
+  gl.bindBuffer(gl.ARRAY_BUFFER, cubeBuffer);
+  
+  const posLoc = gl.getAttribLocation(blockProgram, 'a_position');
+  gl.enableVertexAttribArray(posLoc);
+  gl.vertexAttribPointer(posLoc, 3, gl.FLOAT, false, 20, 0);
+  
+  const texLoc = gl.getAttribLocation(blockProgram, 'a_texCoord');
+  gl.enableVertexAttribArray(texLoc);
+  gl.vertexAttribPointer(texLoc, 2, gl.FLOAT, false, 20, 12);
+  
+  // Uniforms Mode7
+  gl.uniform4f(gl.getUniformLocation(blockProgram, 'u_camera'), 
+    camera.x, camera.y, camera.z, camera.angle);
+  gl.uniform3f(gl.getUniformLocation(blockProgram, 'u_blockPos'), 
+    block.x, block.y, block.z);
+  gl.uniform2f(gl.getUniformLocation(blockProgram, 'u_resolution'), 
+    canvas.width, canvas.height);
+  
+  gl.uniform1i(gl.getUniformLocation(blockProgram, 'u_spriteIndex'), block.tile);
+  gl.uniform1f(gl.getUniformLocation(blockProgram, 'u_spriteCount'), tile_items_size);
+  
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, spriteTexture);
+  gl.uniform1i(gl.getUniformLocation(blockProgram, 'u_spritesheet'), 0);
+  
+  gl.drawArrays(gl.TRIANGLES, 0, 36);
+}
+
+function drawBillboard(billboard) {
+  gl.useProgram(billboardProgram);
+  
+  gl.bindBuffer(gl.ARRAY_BUFFER, billboardBuffer);
+  const posLoc = gl.getAttribLocation(billboardProgram, 'a_offset');
+  gl.enableVertexAttribArray(posLoc);
+  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+  
+  gl.uniform2f(gl.getUniformLocation(billboardProgram, 'u_screenPos'), 
+    billboard.proj.x, billboard.proj.y);
+  gl.uniform1f(gl.getUniformLocation(billboardProgram, 'u_size'), billboard.proj.size);
+  gl.uniform1i(gl.getUniformLocation(billboardProgram, 'u_spriteIndex'), billboard.tile);
+  gl.uniform1f(gl.getUniformLocation(billboardProgram, 'u_spriteCount'), tile_items_size);
+  
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, spriteTexture);
+  gl.uniform1i(gl.getUniformLocation(billboardProgram, 'u_spritesheet'), 0);
+  
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+}
+
+function projectToScreen(worldX, worldY) {
+  const dx = worldX - camera.x;
+  const dy = worldY - camera.y;
+
+  const cosA = Math.cos(-camera.angle);
+  const sinA = Math.sin(-camera.angle);
+
+  const rotX = dx * cosA - dy * sinA;
+  const rotY = dx * sinA + dy * cosA;
+
+  const horizon = 0.3;
+  const perspective = camera.z / (rotY - 0.001);
+
+  const screenX = 0.5 + rotX * (1/(rotY - 0.001));
+  const screenY = 1.0 - (horizon + perspective);
+
+  return {
+    visible: rotY > 0.1 && screenX >= 0 && screenX <= 1 && screenY >= 0 && screenY <= 1,
+    x: screenX,
+    y: screenY,
+    size: 1.0 / rotY
+  };
+}
+
+function isBillboard(n) { return billboard_tiles_set.has(n); }
+function isBlock(n) { return block_tiles_set.has(n); }
+
+// ======= CONTROLES =======
+const keys = {};
+window.addEventListener('keydown', e => keys[e.key] = true);
+window.addEventListener('keyup', e => keys[e.key] = false);
+
+function updateCamera() {
+  const speed = 0.2;
+  const rotSpeed = 0.05;
+
+  if (keys['ArrowUp']) {
+    camera.x -= Math.sin(camera.angle) * speed;
+    camera.y += Math.cos(camera.angle) * speed;
+  }
+  if (keys['ArrowDown']) {
+    camera.x += Math.sin(camera.angle) * speed;
+    camera.y -= Math.cos(camera.angle) * speed;
+  }
+  if (keys['ArrowLeft']) camera.angle += rotSpeed;
+  if (keys['ArrowRight']) camera.angle -= rotSpeed;
+  if (keys['w']) camera.z += 0.1;
+  if (keys['s']) camera.z = Math.max(0.1, camera.z - 0.1);
+}
+
+console.log("Motor 3D Mode7 - Flechas: mover | W/S: altura");
+requestAnimationFrame(render);
+</script>
+</body>
+</html>
