@@ -22,6 +22,16 @@ let billboard_tiles = [4,3];
 let block_tiles = [5];
 const billboard_tiles_set = new Set(billboard_tiles);
 const block_tiles_set = new Set(block_tiles);
+
+// Definir altura de cada tipo de tile (por defecto 1)
+const tile_heights = {
+  5: 30,  // El tile 5 tendrá 3 bloques de altura
+  1: 1,  // Los demás tiles con altura 1 por defecto
+  2: 1,
+  3: 1,
+  4: 1
+};
+
 let tile_items_size = 6;
 
 let image = new Image();
@@ -212,16 +222,24 @@ void main() {
 const blockVS = `#version 300 es
 in vec3 a_position;
 in vec2 a_texCoord;
-in vec3 a_instancePos;
+in vec4 a_instanceData; // x, y, z, height
 
 uniform vec4 u_camera;
 uniform vec2 u_resolution;
 
 out vec2 v_texCoord;
 out float v_depth;
+out float v_height;
 
 void main() {
-  vec3 worldPos = a_position + a_instancePos;
+  vec3 instancePos = a_instanceData.xyz;
+  float height = a_instanceData.w;
+  
+  // Escalar la posición Y según la altura
+  vec3 scaledPos = a_position;
+  scaledPos.y *= height;
+  
+  vec3 worldPos = scaledPos + instancePos;
   
   float dx = worldPos.x - u_camera.x;
   float dy = worldPos.z - u_camera.y;
@@ -237,6 +255,7 @@ void main() {
     gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
     v_texCoord = a_texCoord;
     v_depth = -1.0;
+    v_height = height;
     return;
   }
   
@@ -251,8 +270,10 @@ void main() {
     1.0
   );
   
-  v_texCoord = a_texCoord;
+  // Repetir textura verticalmente según la altura
+  v_texCoord = vec2(a_texCoord.x, a_texCoord.y * height);
   v_depth = rotY;
+  v_height = height;
 }
 `;
 
@@ -260,6 +281,7 @@ const blockFS = `#version 300 es
 precision highp float;
 in vec2 v_texCoord;
 in float v_depth;
+in float v_height;
 out vec4 outColor;
 
 uniform sampler2D u_spritesheet;
@@ -270,7 +292,9 @@ void main() {
   if (v_depth < 0.0) discard;
   
   float spriteWidth = 1.0 / u_spriteCount;
-  vec2 uv = vec2(v_texCoord.x * spriteWidth, v_texCoord.y);
+  
+  // Usar fract para repetir la textura verticalmente
+  vec2 uv = vec2(v_texCoord.x * spriteWidth, fract(v_texCoord.y));
   uv.x += float(u_spriteIndex - 1) * spriteWidth;
 
   vec4 color = texture(u_spritesheet, uv);
@@ -393,7 +417,7 @@ const attribLocations = {
   block: {
     position: gl.getAttribLocation(blockProgram, 'a_position'),
     texCoord: gl.getAttribLocation(blockProgram, 'a_texCoord'),
-    instancePos: gl.getAttribLocation(blockProgram, 'a_instancePos')
+    instanceData: gl.getAttribLocation(blockProgram, 'a_instanceData')
   },
   sky: {
     position: gl.getAttribLocation(skyProgram, 'a_position')
@@ -592,11 +616,16 @@ function drawBlocksInstanced(tileType, instances) {
   
   gl.useProgram(blockProgram);
   
-  const instanceData = new Float32Array(instances.length * 3);
+  // Obtener la altura para este tipo de tile
+  const height = tile_heights[tileType] || 1;
+  
+  // Ahora necesitamos 4 floats por instancia: x, y, z, height
+  const instanceData = new Float32Array(instances.length * 4);
   for (let i = 0; i < instances.length; i++) {
-    instanceData[i * 3 + 0] = instances[i].x;
-    instanceData[i * 3 + 1] = instances[i].y;
-    instanceData[i * 3 + 2] = instances[i].z;
+    instanceData[i * 4 + 0] = instances[i].x;
+    instanceData[i * 4 + 1] = instances[i].y;
+    instanceData[i * 4 + 2] = instances[i].z;
+    instanceData[i * 4 + 3] = height;
   }
   
   gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
@@ -611,9 +640,9 @@ function drawBlocksInstanced(tileType, instances) {
   gl.vertexAttribPointer(attribLocations.block.texCoord, 2, gl.FLOAT, false, 20, 12);
   
   gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-  gl.enableVertexAttribArray(attribLocations.block.instancePos);
-  gl.vertexAttribPointer(attribLocations.block.instancePos, 3, gl.FLOAT, false, 12, 0);
-  gl.vertexAttribDivisor(attribLocations.block.instancePos, 1);
+  gl.enableVertexAttribArray(attribLocations.block.instanceData);
+  gl.vertexAttribPointer(attribLocations.block.instanceData, 4, gl.FLOAT, false, 16, 0);
+  gl.vertexAttribDivisor(attribLocations.block.instanceData, 1);
   
   gl.uniform4f(uniformLocations.block.camera, camera.x, camera.y, camera.z, camera.angle);
   gl.uniform2f(uniformLocations.block.resolution, canvas.width, canvas.height);
@@ -626,7 +655,7 @@ function drawBlocksInstanced(tileType, instances) {
   
   gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, instances.length);
   
-  gl.vertexAttribDivisor(attribLocations.block.instancePos, 0);
+  gl.vertexAttribDivisor(attribLocations.block.instanceData, 0);
 }
 
 function drawBillboard(billboard) {
