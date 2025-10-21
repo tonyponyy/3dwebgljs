@@ -1,19 +1,16 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Motor 3D - Mode7 Unificado</title>
+  <title>Motor 3D - Mode7 Optimizado</title>
   <style>
     body { margin: 0; overflow: hidden; background: #333; }
     canvas { display: block; }
   </style>
 </head>
 <body>
-<canvas id="glCanvas" width="1920" height="1080"></canvas>
+<canvas id="glCanvas" width="960" height="540"></canvas>
 <script src="image64.js"></script>
-
 <script>
-// Spritesheet en base64 (placeholder)
-
 const canvas = document.getElementById('glCanvas');
 const gl = canvas.getContext('webgl2');
 
@@ -30,6 +27,22 @@ let tile_items_size = 6;
 let image = new Image();
 const spriteTexture = gl.createTexture();
 
+const tileMapTexture = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, tileMapTexture);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+function updateTileMapTexture() {
+  const data = new Uint8Array(MAP_WIDTH * MAP_HEIGHT);
+  for (let i = 0; i < tileMap.length; i++) {
+    data[i] = tileMap[i];
+  }
+  gl.bindTexture(gl.TEXTURE_2D, tileMapTexture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8UI, MAP_WIDTH, MAP_HEIGHT, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, data);
+}
+
 image.onload = function() {
   tile_items_size = Math.floor(image.width / TILE_SIZE);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
@@ -37,9 +50,15 @@ image.onload = function() {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  
+  updateTileMapTexture();
 };
 
 image.src = image_64;
+
+// Colores del cielo (RGB normalizado 0-1)
+let color1 = [0.5, 0.7, 1.0];  // Color inferior (azul claro)
+let color2 = [0.1, 0.3, 0.8];  // Color superior (azul oscuro)
 
 let tileMap = [
   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
@@ -67,6 +86,31 @@ let camera = {
   angle: 3.0
 };
 
+// ======= SHADER CIELO =======
+const skyVS = `#version 300 es
+in vec2 a_position;
+out vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}
+`;
+
+const skyFS = `#version 300 es
+precision highp float;
+
+in vec2 v_texCoord;
+out vec4 outColor;
+
+uniform vec3 u_color1;
+uniform vec3 u_color2;
+
+void main() {
+  float t = v_texCoord.y;
+  outColor = vec4(mix(u_color1, u_color2, t), 1.0);
+}
+`;
+
 // ======= SHADER SUELO MODE7 =======
 const vsSource = `#version 300 es
 in vec2 a_position;
@@ -87,14 +131,17 @@ uniform vec4 u_camera;
 uniform float u_spriteCount;
 uniform int u_tileMap[${MAP_WIDTH * MAP_HEIGHT}];
 
+
 void main() {
   float angle = u_camera.w;
   float cosA = cos(angle);
   float sinA = sin(angle);
 
+  
   float horizon = 0.3;
   float screenY = 1.0 - v_texCoord.y;
   float perspective = u_camera.z / (screenY - horizon);
+
 
   if (perspective < 0.0 || perspective > 500.0) {
     discard;
@@ -108,8 +155,7 @@ void main() {
   int tileY = int(floor(worldY));
 
   if(tileX < 0 || tileY < 0 || tileX >= ${MAP_WIDTH} || tileY >= ${MAP_HEIGHT}) {
-    outColor = vec4(0.0, 0.0, 0.0, 1.0);
-    return;
+    discard;
   }
 
   int tileIndex = u_tileMap[tileY * ${MAP_WIDTH} + tileX];
@@ -162,28 +208,24 @@ void main() {
 }
 `;
 
-// ======= SHADER BLOQUES 3D CON PROYECCIÓN MODE7 =======
+// ======= SHADER BLOQUES 3D CON INSTANCING =======
 const blockVS = `#version 300 es
-in vec3 a_position;    // Posición del vértice en el modelo del cubo
+in vec3 a_position;
 in vec2 a_texCoord;
+in vec3 a_instancePos;
 
-uniform vec4 u_camera;      // (x, y, z, angle)
-uniform vec3 u_blockPos;    // Posición del bloque en el mundo 2D
+uniform vec4 u_camera;
 uniform vec2 u_resolution;
 
 out vec2 v_texCoord;
 out float v_depth;
 
 void main() {
-  // 1. Posición del vértice en el mundo
-  vec3 worldPos = a_position + u_blockPos;
+  vec3 worldPos = a_position + a_instancePos;
   
-  // 2. Calcular posición relativa a la cámara en 2D
-  // CLAVE: worldPos.z es la profundidad REAL de cada vértice
   float dx = worldPos.x - u_camera.x;
   float dy = worldPos.z - u_camera.y;
   
-  // 3. Rotar según el ángulo de la cámara
   float angle = u_camera.w;
   float cosA = cos(-angle);
   float sinA = sin(-angle);
@@ -191,7 +233,6 @@ void main() {
   float rotX = dx * cosA - dy * sinA;
   float rotY = dx * sinA + dy * cosA;
   
-  // 4. Si está detrás de la cámara, descartarlo
   if (rotY < 0.1) {
     gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
     v_texCoord = a_texCoord;
@@ -199,24 +240,14 @@ void main() {
     return;
   }
   
-  // 5. Proyección Mode7 EXACTA (igual que el suelo)
   float horizon = 0.3;
-  
-  // Componente horizontal
   float screenX = 0.5 + rotX / rotY;
-  
-  // Componente vertical con altura de cámara
-  // Fórmula Mode7: screenY = 1.0 - (horizon + camZ/rotY - (vertexY - camZ)/rotY)
-  // Simplificado: screenY = 1.0 - horizon - vertexY/rotY + camZ/rotY - camZ/rotY
-  // = 1.0 - horizon - vertexY/rotY
-  // Pero necesitamos: screenY = 1.0 - (horizon + (camZ - vertexY)/rotY)
   float screenY = 1.0 - (horizon + (u_camera.z - worldPos.y) / rotY);
   
-  // 6. Convertir a NDC
   gl_Position = vec4(
     screenX * 2.0 - 1.0,
     screenY * 2.0 - 1.0,
-    rotY / 50.0,  // Depth para z-buffer
+    rotY / 50.0,
     1.0
   );
   
@@ -249,9 +280,7 @@ void main() {
 `;
 
 // ======= GEOMETRÍA CUBO =======
-// Cubo 1x1x1: X horizontal, Y vertical (altura), Z profundidad
 const cubeVertices = new Float32Array([
-  // Frente (hacia cámara, +Z)
   -0.5, 0.0,  0.5,  0, 0,
    0.5, 0.0,  0.5,  1, 0,
    0.5, 1.0,  0.5,  1, 1,
@@ -259,7 +288,6 @@ const cubeVertices = new Float32Array([
    0.5, 1.0,  0.5,  1, 1,
   -0.5, 1.0,  0.5,  0, 1,
 
-  // Atrás (-Z)
    0.5, 0.0, -0.5,  0, 0,
   -0.5, 0.0, -0.5,  1, 0,
   -0.5, 1.0, -0.5,  1, 1,
@@ -267,7 +295,6 @@ const cubeVertices = new Float32Array([
   -0.5, 1.0, -0.5,  1, 1,
    0.5, 1.0, -0.5,  0, 1,
 
-  // Izquierda (-X)
   -0.5, 0.0, -0.5,  0, 0,
   -0.5, 0.0,  0.5,  1, 0,
   -0.5, 1.0,  0.5,  1, 1,
@@ -275,7 +302,6 @@ const cubeVertices = new Float32Array([
   -0.5, 1.0,  0.5,  1, 1,
   -0.5, 1.0, -0.5,  0, 1,
 
-  // Derecha (+X)
    0.5, 0.0,  0.5,  0, 0,
    0.5, 0.0, -0.5,  1, 0,
    0.5, 1.0, -0.5,  1, 1,
@@ -283,7 +309,6 @@ const cubeVertices = new Float32Array([
    0.5, 1.0, -0.5,  1, 1,
    0.5, 1.0,  0.5,  0, 1,
 
-  // Arriba (+Y)
   -0.5, 1.0,  0.5,  0, 0,
    0.5, 1.0,  0.5,  1, 0,
    0.5, 1.0, -0.5,  1, 1,
@@ -291,7 +316,6 @@ const cubeVertices = new Float32Array([
    0.5, 1.0, -0.5,  1, 1,
   -0.5, 1.0, -0.5,  0, 1,
 
-  // Abajo (Y=0)
   -0.5, 0.0, -0.5,  0, 0,
    0.5, 0.0, -0.5,  1, 0,
    0.5, 0.0,  0.5,  1, 1,
@@ -329,6 +353,52 @@ function createProgram(gl, vsSource, fsSource) {
 const program = createProgram(gl, vsSource, fsSource);
 const billboardProgram = createProgram(gl, billboardVS, billboardFS);
 const blockProgram = createProgram(gl, blockVS, blockFS);
+const skyProgram = createProgram(gl, skyVS, skyFS);
+
+// ======= CACHEAR UNIFORMS Y ATRIBUTOS =======
+const uniformLocations = {
+  ground: {
+    spriteCount: gl.getUniformLocation(program, 'u_spriteCount'),
+    camera: gl.getUniformLocation(program, 'u_camera'),
+    tileMap: gl.getUniformLocation(program, 'u_tileMap[0]'),
+    spritesheet: gl.getUniformLocation(program, 'u_spritesheet')
+  },
+  billboard: {
+    screenPos: gl.getUniformLocation(billboardProgram, 'u_screenPos'),
+    size: gl.getUniformLocation(billboardProgram, 'u_size'),
+    spriteIndex: gl.getUniformLocation(billboardProgram, 'u_spriteIndex'),
+    spriteCount: gl.getUniformLocation(billboardProgram, 'u_spriteCount'),
+    spritesheet: gl.getUniformLocation(billboardProgram, 'u_spritesheet')
+  },
+  block: {
+    camera: gl.getUniformLocation(blockProgram, 'u_camera'),
+    resolution: gl.getUniformLocation(blockProgram, 'u_resolution'),
+    spriteIndex: gl.getUniformLocation(blockProgram, 'u_spriteIndex'),
+    spriteCount: gl.getUniformLocation(blockProgram, 'u_spriteCount'),
+    spritesheet: gl.getUniformLocation(blockProgram, 'u_spritesheet')
+  },
+  sky: {
+    color1: gl.getUniformLocation(skyProgram, 'u_color1'),
+    color2: gl.getUniformLocation(skyProgram, 'u_color2')
+  }
+};
+
+const attribLocations = {
+  ground: {
+    position: gl.getAttribLocation(program, 'a_position')
+  },
+  billboard: {
+    offset: gl.getAttribLocation(billboardProgram, 'a_offset')
+  },
+  block: {
+    position: gl.getAttribLocation(blockProgram, 'a_position'),
+    texCoord: gl.getAttribLocation(blockProgram, 'a_texCoord'),
+    instancePos: gl.getAttribLocation(blockProgram, 'a_instancePos')
+  },
+  sky: {
+    position: gl.getAttribLocation(skyProgram, 'a_position')
+  }
+};
 
 // ======= BUFFERS =======
 const positionBuffer = gl.createBuffer();
@@ -343,171 +413,244 @@ const cubeBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, cubeBuffer);
 gl.bufferData(gl.ARRAY_BUFFER, cubeVertices, gl.STATIC_DRAW);
 
-// ======= RECOLECTAR OBJETOS =======
+const instanceBuffer = gl.createBuffer();
+
+const skyBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, skyBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+
+// ======= FRUSTUM CULLING OPTIMIZADO =======
+function isInFrustum(worldX, worldZ) {
+  const dx = worldX - camera.x;
+  const dz = worldZ - camera.y;
+  
+  const cosA = Math.cos(-camera.angle);
+  const sinA = Math.sin(-camera.angle);
+  
+  const rotY = dx * sinA + dz * cosA;
+  
+  if (rotY < 0.1 || rotY > 30.0) return false;
+  
+  const rotX = dx * cosA - dz * sinA;
+  const screenX = 0.5 + rotX / rotY;
+  
+  return screenX >= -0.2 && screenX <= 1.2;
+}
+
+// ======= RECOLECTAR OBJETOS CON ALGORITMO DEL PINTOR =======
 function collectRenderableObjects() {
-  const objects = [];
+  const allObjects = [];
   
   for (let i = 0; i < tileMap.length; i++) {
     const tile = tileMap[i];
+    if (tile === 0) continue;
+    
     const mapX = i % MAP_WIDTH;
     const mapY = Math.floor(i / MAP_WIDTH);
     
+    const worldX = mapX + 0.5;
+    const worldZ = mapY + 0.5;
+    
+    if (!isInFrustum(worldX, worldZ)) continue;
+    
+    const dx = worldX - camera.x;
+    const dz = worldZ - camera.y;
+    const dist = dx * dx + dz * dz;
+    
     if (isBillboard(tile)) {
-      const x = mapX + 0.5;
-      const y = mapY + 0.5;
-      const dx = x - camera.x;
-      const dy = y - camera.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      
-      const proj = projectToScreen(x, y);
+      const proj = projectToScreen(worldX, worldZ);
       if (proj.visible) {
-        objects.push({
+        allObjects.push({
           type: 'billboard',
-          x, y, tile, dist, proj
+          x: worldX, 
+          y: worldZ, 
+          tile, 
+          dist, 
+          proj
         });
       }
-    }
-    
-    if (isBlock(tile)) {
-      // Posición en el mundo:
-      const x = mapX + 0.5;
-      const y = 0.0; // Altura base del bloque
-      const z = mapY + 0.5;
-      
-      // Para el algoritmo del pintor, usar el punto MÁS LEJANO del cubo
-      // (el borde trasero superior)
-      const dx = x - camera.x;
-      const dz = (z + 0.5) - camera.y; // Borde trasero del cubo
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      
-      objects.push({
+    } else if (isBlock(tile)) {
+      allObjects.push({
         type: 'block',
-        x, y, z, tile, dist
+        x: worldX,
+        y: 0.0,
+        z: worldZ,
+        tile,
+        dist
       });
     }
   }
   
-  // Ordenar por distancia (algoritmo del pintor)
-  objects.sort((a, b) => b.dist - a.dist);
+  allObjects.sort((a, b) => b.dist - a.dist);
   
-  return objects;
+  return allObjects;
 }
+
+let sky_colors = true;
 
 // ======= RENDER =======
 function render(time) {
   updateCamera();
   
   gl.viewport(0, 0, canvas.width, canvas.height);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  gl.clearColor(0.5, 0.7, 1.0, 1.0);
   
-  // 1. Suelo (sin depth test)
+  // Cielo
+  if (sky_colors){
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.BLEND);
+
+    gl.useProgram(skyProgram);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, skyBuffer);
+    gl.enableVertexAttribArray(attribLocations.sky.position);
+    gl.vertexAttribPointer(attribLocations.sky.position, 2, gl.FLOAT, false, 0, 0);
+
+    gl.uniform3f(uniformLocations.sky.color1, color1[0], color1[1], color1[2]);
+    gl.uniform3f(uniformLocations.sky.color2, color2[0], color2[1], color2[2]);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+  
+  // 1. Suelo
   gl.disable(gl.DEPTH_TEST);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   
   gl.useProgram(program);
   
-  const posLoc = gl.getAttribLocation(program, 'a_position');
-  gl.enableVertexAttribArray(posLoc);
+  gl.enableVertexAttribArray(attribLocations.ground.position);
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+  gl.vertexAttribPointer(attribLocations.ground.position, 2, gl.FLOAT, false, 0, 0);
   
-  gl.uniform1f(gl.getUniformLocation(program, 'u_spriteCount'), tile_items_size);
-  gl.uniform4f(gl.getUniformLocation(program, 'u_camera'), camera.x, camera.y, camera.z, camera.angle);
-  gl.uniform1iv(gl.getUniformLocation(program, 'u_tileMap[0]'), tileMap);
+  gl.uniform1f(uniformLocations.ground.spriteCount, tile_items_size);
+  gl.uniform4f(uniformLocations.ground.camera, camera.x, camera.y, camera.z, camera.angle);
+  gl.uniform1iv(uniformLocations.ground.tileMap, tileMap);
   
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, spriteTexture);
-  gl.uniform1i(gl.getUniformLocation(program, 'u_spritesheet'), 0);
+  gl.uniform1i(uniformLocations.ground.spritesheet, 0);
   
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   
-  // Limpiar depth buffer antes de renderizar objetos 3D
   gl.clear(gl.DEPTH_BUFFER_BIT);
   
-  // 2. Recoger objetos
-  const objects = collectRenderableObjects();
-  
-  // Preparar blending para transparencias
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-  
-  // 3. Renderizar objetos con algoritmo del pintor
-  // Pero habilitamos depth test para que las caras de los cubos se ordenen correctamente
-  
-  for (const obj of objects) {
+  const allObjects = collectRenderableObjects();
+
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthFunc(gl.LEQUAL);
+  gl.depthMask(true);
+  gl.disable(gl.BLEND);
+
+  let currentTile = null;
+  let batchInstances = [];
+
+  for (const obj of allObjects) {
     if (obj.type === 'block') {
-      // Activar depth test solo para bloques (para evitar caras huecas)
-      gl.enable(gl.DEPTH_TEST);
-      gl.depthFunc(gl.LESS);
-      gl.depthMask(true);
-      drawBlock(obj);
+      if (currentTile === null) {
+        currentTile = obj.tile;
+      }
+
+      if (currentTile === obj.tile) {
+        batchInstances.push(obj);
+      } else {
+        if (batchInstances.length > 0) {
+          drawBlocksInstanced(currentTile, batchInstances);
+        }
+        currentTile = obj.tile;
+        batchInstances = [obj];
+      }
     } else if (obj.type === 'billboard') {
-      // Desactivar depth test para billboards (usar solo algoritmo del pintor)
-      gl.disable(gl.DEPTH_TEST);
+      if (batchInstances.length > 0) {
+        drawBlocksInstanced(currentTile, batchInstances);
+        batchInstances = [];
+        currentTile = null;
+      }
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthMask(false);
+
       drawBillboard(obj);
+
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
     }
   }
-  
+
+  if (batchInstances.length > 0) {
+    drawBlocksInstanced(currentTile, batchInstances);
+  }
+
+  gl.disable(gl.DEPTH_TEST);
+  gl.enable(gl.BLEND);
+
   requestAnimationFrame(render);
 }
 
-function drawBlock(block) {
+function drawBlocksInstanced(tileType, instances) {
+  if (!instances || instances.length === 0) return;
+  
   gl.useProgram(blockProgram);
+  
+  const instanceData = new Float32Array(instances.length * 3);
+  for (let i = 0; i < instances.length; i++) {
+    instanceData[i * 3 + 0] = instances[i].x;
+    instanceData[i * 3 + 1] = instances[i].y;
+    instanceData[i * 3 + 2] = instances[i].z;
+  }
+  
+  gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.DYNAMIC_DRAW);
   
   gl.bindBuffer(gl.ARRAY_BUFFER, cubeBuffer);
   
-  const posLoc = gl.getAttribLocation(blockProgram, 'a_position');
-  gl.enableVertexAttribArray(posLoc);
-  gl.vertexAttribPointer(posLoc, 3, gl.FLOAT, false, 20, 0);
+  gl.enableVertexAttribArray(attribLocations.block.position);
+  gl.vertexAttribPointer(attribLocations.block.position, 3, gl.FLOAT, false, 20, 0);
   
-  const texLoc = gl.getAttribLocation(blockProgram, 'a_texCoord');
-  gl.enableVertexAttribArray(texLoc);
-  gl.vertexAttribPointer(texLoc, 2, gl.FLOAT, false, 20, 12);
+  gl.enableVertexAttribArray(attribLocations.block.texCoord);
+  gl.vertexAttribPointer(attribLocations.block.texCoord, 2, gl.FLOAT, false, 20, 12);
   
-  // Uniforms Mode7
-  gl.uniform4f(gl.getUniformLocation(blockProgram, 'u_camera'), 
-    camera.x, camera.y, camera.z, camera.angle);
-  gl.uniform3f(gl.getUniformLocation(blockProgram, 'u_blockPos'), 
-    block.x, block.y, block.z);
-  gl.uniform2f(gl.getUniformLocation(blockProgram, 'u_resolution'), 
-    canvas.width, canvas.height);
+  gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
+  gl.enableVertexAttribArray(attribLocations.block.instancePos);
+  gl.vertexAttribPointer(attribLocations.block.instancePos, 3, gl.FLOAT, false, 12, 0);
+  gl.vertexAttribDivisor(attribLocations.block.instancePos, 1);
   
-  gl.uniform1i(gl.getUniformLocation(blockProgram, 'u_spriteIndex'), block.tile);
-  gl.uniform1f(gl.getUniformLocation(blockProgram, 'u_spriteCount'), tile_items_size);
+  gl.uniform4f(uniformLocations.block.camera, camera.x, camera.y, camera.z, camera.angle);
+  gl.uniform2f(uniformLocations.block.resolution, canvas.width, canvas.height);
+  gl.uniform1i(uniformLocations.block.spriteIndex, tileType);
+  gl.uniform1f(uniformLocations.block.spriteCount, tile_items_size);
   
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, spriteTexture);
-  gl.uniform1i(gl.getUniformLocation(blockProgram, 'u_spritesheet'), 0);
+  gl.uniform1i(uniformLocations.block.spritesheet, 0);
   
-  gl.drawArrays(gl.TRIANGLES, 0, 36);
+  gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, instances.length);
+  
+  gl.vertexAttribDivisor(attribLocations.block.instancePos, 0);
 }
 
 function drawBillboard(billboard) {
   gl.useProgram(billboardProgram);
   
   gl.bindBuffer(gl.ARRAY_BUFFER, billboardBuffer);
-  const posLoc = gl.getAttribLocation(billboardProgram, 'a_offset');
-  gl.enableVertexAttribArray(posLoc);
-  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(attribLocations.billboard.offset);
+  gl.vertexAttribPointer(attribLocations.billboard.offset, 2, gl.FLOAT, false, 0, 0);
   
-  gl.uniform2f(gl.getUniformLocation(billboardProgram, 'u_screenPos'), 
-    billboard.proj.x, billboard.proj.y);
-  gl.uniform1f(gl.getUniformLocation(billboardProgram, 'u_size'), billboard.proj.size);
-  gl.uniform1i(gl.getUniformLocation(billboardProgram, 'u_spriteIndex'), billboard.tile);
-  gl.uniform1f(gl.getUniformLocation(billboardProgram, 'u_spriteCount'), tile_items_size);
+  gl.uniform2f(uniformLocations.billboard.screenPos, billboard.proj.x, billboard.proj.y);
+  gl.uniform1f(uniformLocations.billboard.size, billboard.proj.size);
+  gl.uniform1i(uniformLocations.billboard.spriteIndex, billboard.tile);
+  gl.uniform1f(uniformLocations.billboard.spriteCount, tile_items_size);
   
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, spriteTexture);
-  gl.uniform1i(gl.getUniformLocation(billboardProgram, 'u_spritesheet'), 0);
+  gl.uniform1i(uniformLocations.billboard.spritesheet, 0);
   
   gl.drawArrays(gl.TRIANGLES, 0, 6);
 }
 
-function projectToScreen(worldX, worldY) {
+function projectToScreen(worldX, worldZ) {
   const dx = worldX - camera.x;
-  const dy = worldY - camera.y;
+  const dy = worldZ - camera.y;
 
   const cosA = Math.cos(-camera.angle);
   const sinA = Math.sin(-camera.angle);
@@ -555,7 +698,7 @@ function updateCamera() {
   if (keys['s']) camera.z = Math.max(0.1, camera.z - 0.1);
 }
 
-console.log("Motor 3D Mode7 - Flechas: mover | W/S: altura");
+console.log("Motor 3D Mode7 con Cielo Simple - Flechas: mover | W/S: altura");
 requestAnimationFrame(render);
 </script>
 </body>
