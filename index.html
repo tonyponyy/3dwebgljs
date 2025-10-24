@@ -1,38 +1,95 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Motor 3D - Mode7 Optimizado</title>
+  <title>Motor 3D - Iluminación Configurable</title>
   <style>
     body { margin: 0; overflow: hidden; background: #333; }
     canvas { display: block; }
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-family: monospace;
+      background: rgba(0,0,0,0.7);
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 14px;
+    }
+    #fps {
+      color: #0f0;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
 <canvas id="glCanvas" width="960" height="540"></canvas>
+<div id="controls">
+  <div><span id="fps">FPS: 0</span></div>
+  <div>Controles: Flechas = mover | W/S = altura</div>
+  <div>L = Toggle iluminación | <span id="lightStatus">ON</span></div>
+</div>
 <script src="image64.js"></script>
+<script src="test48.js"></script>
 <script>
+// ======= CONFIGURACIÓN ILUMINACIÓN =======
+let ILLUMINATION = true;
+let AMBIENT_LIGHT = 0.5;
+let LIGHT_DIFFUSE = 0.7;
+let lightDir = [0.3, 0.7, 0.5];
+
+let camera = {
+  x: 24.0,
+  y: 24.0,
+  z: 1.0,
+  angle: 3.0
+};
+
 const canvas = document.getElementById('glCanvas');
-const gl = canvas.getContext('webgl2');
+const gl = canvas.getContext('webgl2', {
+  alpha: false,
+  depth: true,
+  stencil: false,
+  antialias: false,
+  premultipliedAlpha: false,
+  preserveDrawingBuffer: false,
+  powerPreference: 'high-performance'
+});
+
+// ======= CONFIGURACIÓN DE CALIDAD =======
+const RENDER_SCALE = 1.0;
+const CANVAS_WIDTH = 960;
+const CANVAS_HEIGHT = 540;
+
+canvas.width = CANVAS_WIDTH * RENDER_SCALE;
+canvas.height = CANVAS_HEIGHT * RENDER_SCALE;
+canvas.style.width = CANVAS_WIDTH + 'px';
+canvas.style.height = CANVAS_HEIGHT + 'px';
 
 // ======= Configuración =======
 const TILE_SIZE = 32;
-const MAP_WIDTH = 16;
-const MAP_HEIGHT = 16;
-let billboard_tiles = [4,3];
-let block_tiles = [5];
+const MAP_WIDTH = 48;
+const MAP_HEIGHT = 48;
+const MAX_RENDER_DISTANCE = 60.0;
+const FRUSTUM_MARGIN = 0.2;
+
+let billboard_tiles = [4,3,9,10];
+let block_tiles = [5,7,8];
 const billboard_tiles_set = new Set(billboard_tiles);
 const block_tiles_set = new Set(block_tiles);
 
-// Definir altura de cada tipo de tile (por defecto 1)
 const tile_heights = {
-  5: 30,  // El tile 5 tendrá 3 bloques de altura
-  1: 1,  // Los demás tiles con altura 1 por defecto
-  2: 1,
-  3: 1,
-  4: 1
+  5: 4,
+  7: 8,
+  8:10
+
 };
 
 let tile_items_size = 6;
+
+let cachedCosA = 0;
+let cachedSinA = 0;
+let cameraAngleCache = 0;
 
 let image = new Image();
 const spriteTexture = gl.createTexture();
@@ -49,8 +106,10 @@ function updateTileMapTexture() {
   for (let i = 0; i < tileMap.length; i++) {
     data[i] = tileMap[i];
   }
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);  // ← AÑADE ESTA LÍNEA
   gl.bindTexture(gl.TEXTURE_2D, tileMapTexture);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8UI, MAP_WIDTH, MAP_HEIGHT, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, data);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);   // ← Y ESTA (para restaurar)
 }
 
 image.onload = function() {
@@ -66,35 +125,10 @@ image.onload = function() {
 
 image.src = image_64;
 
-// Colores del cielo (RGB normalizado 0-1)
-let color1 = [0.5, 0.7, 1.0];  // Color inferior (azul claro)
-let color2 = [0.1, 0.3, 0.8];  // Color superior (azul oscuro)
+let color1 = [0.5, 0.7, 1.0];
+let color2 = [0.1, 0.3, 0.8];
 
-let tileMap = [
-  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-  1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,
-  1,2,1,1,2,3,4,3,3,3,3,3,3,3,2,3,
-  3,2,3,4,3,3,5,5,3,3,3,3,3,3,2,3,
-  3,2,3,3,3,3,3,5,3,3,3,3,3,3,2,3,
-  3,2,3,3,3,3,3,3,3,3,3,4,3,3,2,3,
-  3,2,3,3,5,3,3,3,1,1,1,1,1,1,2,1,
-  1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,
-  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-  2,2,2,2,5,5,5,5,5,5,5,5,5,5,5,5,
-  5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
-  5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
-  5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
-  5,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
-];
-
-let camera = {
-  x: 8.0,
-  y: 4.76,
-  z: 1.0,
-  angle: 3.0
-};
+let tileMap = TileMaps["test48"].layers[0].data
 
 // ======= SHADER CIELO =======
 const skyVS = `#version 300 es
@@ -108,20 +142,17 @@ void main() {
 
 const skyFS = `#version 300 es
 precision highp float;
-
 in vec2 v_texCoord;
 out vec4 outColor;
-
 uniform vec3 u_color1;
 uniform vec3 u_color2;
-
 void main() {
   float t = v_texCoord.y;
   outColor = vec4(mix(u_color1, u_color2, t), 1.0);
 }
 `;
 
-// ======= SHADER SUELO MODE7 =======
+// ======= SHADER SUELO MODE7 (USANDO TEXTURA EN VEZ DE ARRAY) =======
 const vsSource = `#version 300 es
 in vec2 a_position;
 out vec2 v_texCoord;
@@ -133,25 +164,22 @@ void main() {
 
 const fsSource = `#version 300 es
 precision highp float;
+precision highp usampler2D;
 in vec2 v_texCoord;
 out vec4 outColor;
-
 uniform sampler2D u_spritesheet;
+uniform usampler2D u_tileMapTexture;
 uniform vec4 u_camera;
 uniform float u_spriteCount;
-uniform int u_tileMap[${MAP_WIDTH * MAP_HEIGHT}];
-
 
 void main() {
   float angle = u_camera.w;
   float cosA = cos(angle);
   float sinA = sin(angle);
-
   
   float horizon = 0.3;
   float screenY = 1.0 - v_texCoord.y;
   float perspective = u_camera.z / (screenY - horizon);
-
 
   if (perspective < 0.0 || perspective > 500.0) {
     discard;
@@ -161,6 +189,7 @@ void main() {
   float worldX = u_camera.x + (cosA * dx - sinA * 1.0) * perspective;
   float worldY = u_camera.y + (sinA * dx + cosA * 1.0) * perspective;
 
+  
   int tileX = int(floor(worldX));
   int tileY = int(floor(worldY));
 
@@ -168,8 +197,10 @@ void main() {
     discard;
   }
 
-  int tileIndex = u_tileMap[tileY * ${MAP_WIDTH} + tileX];
-  if(tileIndex == 0) {
+  vec2 tileTexCoord = vec2(float(tileX) + 0.5, float(tileY) + 0.5) / vec2(${MAP_WIDTH}.0, ${MAP_HEIGHT}.0);
+  uint tileIndex = texture(u_tileMapTexture, tileTexCoord).r;
+  
+  if(tileIndex == 0u) {
     outColor = vec4(0.3, 0.3, 0.3, 1.0);
     return;
   }
@@ -179,7 +210,7 @@ void main() {
 
   float spriteWidth = 1.0 / u_spriteCount;
   vec2 texCoord = vec2(tx * spriteWidth, ty);
-  texCoord.x += float(tileIndex - 1) * spriteWidth;
+  texCoord.x += float(tileIndex - 1u) * spriteWidth;
 
   outColor = texture(u_spritesheet, texCoord);
 }
@@ -202,7 +233,6 @@ const billboardFS = `#version 300 es
 precision highp float;
 in vec2 v_texCoord;
 out vec4 outColor;
-
 uniform sampler2D u_spritesheet;
 uniform int u_spriteIndex;
 uniform float u_spriteCount;
@@ -211,18 +241,18 @@ void main() {
   vec2 uv = v_texCoord;
   uv.x /= u_spriteCount;
   uv.x += float(u_spriteIndex - 1) / u_spriteCount;
-
   vec4 color = texture(u_spritesheet, uv);
   if (color.a < 0.1) discard;
   outColor = color;
 }
 `;
 
-// ======= SHADER BLOQUES 3D CON INSTANCING =======
+// ======= SHADER BLOQUES 3D CON SOMBREADO CONFIGURABLE =======
 const blockVS = `#version 300 es
 in vec3 a_position;
 in vec2 a_texCoord;
-in vec4 a_instanceData; // x, y, z, height
+in vec3 a_normal;
+in vec4 a_instanceData;
 
 uniform vec4 u_camera;
 uniform vec2 u_resolution;
@@ -230,12 +260,12 @@ uniform vec2 u_resolution;
 out vec2 v_texCoord;
 out float v_depth;
 out float v_height;
+out vec3 v_normal;
 
 void main() {
   vec3 instancePos = a_instanceData.xyz;
   float height = a_instanceData.w;
   
-  // Escalar la posición Y según la altura
   vec3 scaledPos = a_position;
   scaledPos.y *= height;
   
@@ -256,6 +286,7 @@ void main() {
     v_texCoord = a_texCoord;
     v_depth = -1.0;
     v_height = height;
+    v_normal = a_normal;
     return;
   }
   
@@ -270,10 +301,10 @@ void main() {
     1.0
   );
   
-  // Repetir textura verticalmente según la altura
   v_texCoord = vec2(a_texCoord.x, a_texCoord.y * height);
   v_depth = rotY;
   v_height = height;
+  v_normal = a_normal;
 }
 `;
 
@@ -282,70 +313,88 @@ precision highp float;
 in vec2 v_texCoord;
 in float v_depth;
 in float v_height;
+in vec3 v_normal;
 out vec4 outColor;
 
 uniform sampler2D u_spritesheet;
 uniform int u_spriteIndex;
 uniform float u_spriteCount;
+uniform vec3 u_lightDir;
+uniform bool u_illumination;
+uniform float u_ambient;
+uniform float u_diffuse;
 
 void main() {
   if (v_depth < 0.0) discard;
   
   float spriteWidth = 1.0 / u_spriteCount;
-  
-  // Usar fract para repetir la textura verticalmente
   vec2 uv = vec2(v_texCoord.x * spriteWidth, fract(v_texCoord.y));
   uv.x += float(u_spriteIndex - 1) * spriteWidth;
 
   vec4 color = texture(u_spritesheet, uv);
   if (color.a < 0.1) discard;
-  outColor = color;
+  
+  if (!u_illumination) {
+    outColor = color;
+    return;
+  }
+  
+  float diffuseLight = max(dot(v_normal, u_lightDir), 0.0);
+  float lighting = u_ambient + diffuseLight * u_diffuse;
+  
+  outColor = vec4(color.rgb * lighting, color.a);
 }
 `;
 
-// ======= GEOMETRÍA CUBO =======
+// ======= GEOMETRÍA CUBO CON NORMALES =======
 const cubeVertices = new Float32Array([
-  -0.5, 0.0,  0.5,  0, 0,
-   0.5, 0.0,  0.5,  1, 0,
-   0.5, 1.0,  0.5,  1, 1,
-  -0.5, 0.0,  0.5,  0, 0,
-   0.5, 1.0,  0.5,  1, 1,
-  -0.5, 1.0,  0.5,  0, 1,
+  // Cara frontal (Z+) - Normal: (0, 0, 1)
+  -0.5, 0.0,  0.5,  0, 0,  0, 0, 1,
+   0.5, 0.0,  0.5,  1, 0,  0, 0, 1,
+   0.5, 1.0,  0.5,  1, 1,  0, 0, 1,
+  -0.5, 0.0,  0.5,  0, 0,  0, 0, 1,
+   0.5, 1.0,  0.5,  1, 1,  0, 0, 1,
+  -0.5, 1.0,  0.5,  0, 1,  0, 0, 1,
 
-   0.5, 0.0, -0.5,  0, 0,
-  -0.5, 0.0, -0.5,  1, 0,
-  -0.5, 1.0, -0.5,  1, 1,
-   0.5, 0.0, -0.5,  0, 0,
-  -0.5, 1.0, -0.5,  1, 1,
-   0.5, 1.0, -0.5,  0, 1,
+  // Cara trasera (Z-) - Normal: (0, 0, -1)
+   0.5, 0.0, -0.5,  0, 0,  0, 0, -1,
+  -0.5, 0.0, -0.5,  1, 0,  0, 0, -1,
+  -0.5, 1.0, -0.5,  1, 1,  0, 0, -1,
+   0.5, 0.0, -0.5,  0, 0,  0, 0, -1,
+  -0.5, 1.0, -0.5,  1, 1,  0, 0, -1,
+   0.5, 1.0, -0.5,  0, 1,  0, 0, -1,
 
-  -0.5, 0.0, -0.5,  0, 0,
-  -0.5, 0.0,  0.5,  1, 0,
-  -0.5, 1.0,  0.5,  1, 1,
-  -0.5, 0.0, -0.5,  0, 0,
-  -0.5, 1.0,  0.5,  1, 1,
-  -0.5, 1.0, -0.5,  0, 1,
+  // Cara izquierda (X-) - Normal: (-1, 0, 0)
+  -0.5, 0.0, -0.5,  0, 0,  -1, 0, 0,
+  -0.5, 0.0,  0.5,  1, 0,  -1, 0, 0,
+  -0.5, 1.0,  0.5,  1, 1,  -1, 0, 0,
+  -0.5, 0.0, -0.5,  0, 0,  -1, 0, 0,
+  -0.5, 1.0,  0.5,  1, 1,  -1, 0, 0,
+  -0.5, 1.0, -0.5,  0, 1,  -1, 0, 0,
 
-   0.5, 0.0,  0.5,  0, 0,
-   0.5, 0.0, -0.5,  1, 0,
-   0.5, 1.0, -0.5,  1, 1,
-   0.5, 0.0,  0.5,  0, 0,
-   0.5, 1.0, -0.5,  1, 1,
-   0.5, 1.0,  0.5,  0, 1,
+  // Cara derecha (X+) - Normal: (1, 0, 0)
+   0.5, 0.0,  0.5,  0, 0,  1, 0, 0,
+   0.5, 0.0, -0.5,  1, 0,  1, 0, 0,
+   0.5, 1.0, -0.5,  1, 1,  1, 0, 0,
+   0.5, 0.0,  0.5,  0, 0,  1, 0, 0,
+   0.5, 1.0, -0.5,  1, 1,  1, 0, 0,
+   0.5, 1.0,  0.5,  0, 1,  1, 0, 0,
 
-  -0.5, 1.0,  0.5,  0, 0,
-   0.5, 1.0,  0.5,  1, 0,
-   0.5, 1.0, -0.5,  1, 1,
-  -0.5, 1.0,  0.5,  0, 0,
-   0.5, 1.0, -0.5,  1, 1,
-  -0.5, 1.0, -0.5,  0, 1,
+  // Cara superior (Y+) - Normal: (0, 1, 0)
+  -0.5, 1.0,  0.5,  0, 0,  0, 1, 0,
+   0.5, 1.0,  0.5,  1, 0,  0, 1, 0,
+   0.5, 1.0, -0.5,  1, 1,  0, 1, 0,
+  -0.5, 1.0,  0.5,  0, 0,  0, 1, 0,
+   0.5, 1.0, -0.5,  1, 1,  0, 1, 0,
+  -0.5, 1.0, -0.5,  0, 1,  0, 1, 0,
 
-  -0.5, 0.0, -0.5,  0, 0,
-   0.5, 0.0, -0.5,  1, 0,
-   0.5, 0.0,  0.5,  1, 1,
-  -0.5, 0.0, -0.5,  0, 0,
-   0.5, 0.0,  0.5,  1, 1,
-  -0.5, 0.0,  0.5,  0, 1
+  // Cara inferior (Y-) - Normal: (0, -1, 0)
+  -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
+   0.5, 0.0, -0.5,  1, 0,  0, -1, 0,
+   0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
+  -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
+   0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
+  -0.5, 0.0,  0.5,  0, 1,  0, -1, 0
 ]);
 
 // ======= COMPILACIÓN SHADERS =======
@@ -379,12 +428,12 @@ const billboardProgram = createProgram(gl, billboardVS, billboardFS);
 const blockProgram = createProgram(gl, blockVS, blockFS);
 const skyProgram = createProgram(gl, skyVS, skyFS);
 
-// ======= CACHEAR UNIFORMS Y ATRIBUTOS =======
+// ======= UNIFORMS Y ATRIBUTOS =======
 const uniformLocations = {
   ground: {
     spriteCount: gl.getUniformLocation(program, 'u_spriteCount'),
     camera: gl.getUniformLocation(program, 'u_camera'),
-    tileMap: gl.getUniformLocation(program, 'u_tileMap[0]'),
+    tileMapTexture: gl.getUniformLocation(program, 'u_tileMapTexture'),
     spritesheet: gl.getUniformLocation(program, 'u_spritesheet')
   },
   billboard: {
@@ -399,7 +448,11 @@ const uniformLocations = {
     resolution: gl.getUniformLocation(blockProgram, 'u_resolution'),
     spriteIndex: gl.getUniformLocation(blockProgram, 'u_spriteIndex'),
     spriteCount: gl.getUniformLocation(blockProgram, 'u_spriteCount'),
-    spritesheet: gl.getUniformLocation(blockProgram, 'u_spritesheet')
+    spritesheet: gl.getUniformLocation(blockProgram, 'u_spritesheet'),
+    lightDir: gl.getUniformLocation(blockProgram, 'u_lightDir'),
+    illumination: gl.getUniformLocation(blockProgram, 'u_illumination'),
+    ambient: gl.getUniformLocation(blockProgram, 'u_ambient'),
+    diffuse: gl.getUniformLocation(blockProgram, 'u_diffuse')
   },
   sky: {
     color1: gl.getUniformLocation(skyProgram, 'u_color1'),
@@ -417,6 +470,7 @@ const attribLocations = {
   block: {
     position: gl.getAttribLocation(blockProgram, 'a_position'),
     texCoord: gl.getAttribLocation(blockProgram, 'a_texCoord'),
+    normal: gl.getAttribLocation(blockProgram, 'a_normal'),
     instanceData: gl.getAttribLocation(blockProgram, 'a_instanceData')
   },
   sky: {
@@ -443,27 +497,33 @@ const skyBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, skyBuffer);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
-// ======= FRUSTUM CULLING OPTIMIZADO =======
-function isInFrustum(worldX, worldZ) {
-  const dx = worldX - camera.x;
-  const dz = worldZ - camera.y;
-  
-  const cosA = Math.cos(-camera.angle);
-  const sinA = Math.sin(-camera.angle);
-  
-  const rotY = dx * sinA + dz * cosA;
-  
-  if (rotY < 0.1 || rotY > 30.0) return false;
-  
-  const rotX = dx * cosA - dz * sinA;
-  const screenX = 0.5 + rotX / rotY;
-  
-  return screenX >= -0.2 && screenX <= 1.2;
+// ======= FRUSTUM CULLING =======
+function updateTrigCache() {
+  if (cameraAngleCache !== camera.angle) {
+    cameraAngleCache = camera.angle;
+    cachedCosA = Math.cos(-camera.angle);
+    cachedSinA = Math.sin(-camera.angle);
+  }
 }
 
-// ======= RECOLECTAR OBJETOS CON ALGORITMO DEL PINTOR =======
+function isInFrustum(worldX, worldY) {
+  const dx = worldX - camera.x;
+  const dy = worldY - camera.y;
+  const rotY = dx * cachedSinA + dy * cachedCosA;
+  if (rotY < 0.1 || rotY > MAX_RENDER_DISTANCE) return false;
+  const rotX = dx * cachedCosA - dy * cachedSinA;
+  const screenX = 0.5 + rotX / rotY;
+  return screenX >= -FRUSTUM_MARGIN && screenX <= (1.0 + FRUSTUM_MARGIN);
+}
+
+// ======= RECOLECTAR OBJETOS =======
+const tempObjects = new Array(MAP_WIDTH * MAP_HEIGHT);
+let objectCount = 0;
+
 function collectRenderableObjects() {
-  const allObjects = [];
+  objectCount = 0;
+  const camX = camera.x;
+  const camY = camera.y;
   
   for (let i = 0; i < tileMap.length; i++) {
     const tile = tileMap[i];
@@ -471,50 +531,62 @@ function collectRenderableObjects() {
     
     const mapX = i % MAP_WIDTH;
     const mapY = Math.floor(i / MAP_WIDTH);
-    
     const worldX = mapX + 0.5;
-    const worldZ = mapY + 0.5;
+    const worldY = mapY + 0.5;  // ← CAMBIO AQUÍ
     
-    if (!isInFrustum(worldX, worldZ)) continue;
+    if (!isInFrustum(worldX, worldY)) continue;  // ← Y AQUÍ
     
-    const dx = worldX - camera.x;
-    const dz = worldZ - camera.y;
-    const dist = dx * dx + dz * dz;
+    const dx = worldX - camX;
+    const dy = worldY - camY;  // ← Y AQUÍ
+    const distSq = dx * dx + dy * dy;  // ← Y AQUÍ
     
     if (isBillboard(tile)) {
-      const proj = projectToScreen(worldX, worldZ);
+      const proj = projectToScreen(worldX, worldY);  // ← Y AQUÍ
       if (proj.visible) {
-        allObjects.push({
+        tempObjects[objectCount++] = {
           type: 'billboard',
           x: worldX, 
-          y: worldZ, 
+          y: worldY,  // ← Y AQUÍ
           tile, 
-          dist, 
+          dist: distSq, 
           proj
-        });
+        };
       }
     } else if (isBlock(tile)) {
-      allObjects.push({
+      tempObjects[objectCount++] = {
         type: 'block',
         x: worldX,
         y: 0.0,
-        z: worldZ,
+        z: worldY,  // ← Y AQUÍ (mantiene z pero con worldY)
         tile,
-        dist
-      });
+        dist: distSq
+      };
     }
   }
   
-  allObjects.sort((a, b) => b.dist - a.dist);
-  
-  return allObjects;
+  const objects = tempObjects.slice(0, objectCount);
+  objects.sort((a, b) => b.dist - a.dist);
+  return objects;
 }
 
 let sky_colors = true;
 
 // ======= RENDER =======
+let lastTime = 0;
+let frameCount = 0;
+let fps = 0;
+
 function render(time) {
+  frameCount++;
+  if (time - lastTime >= 1000) {
+    fps = frameCount;
+    frameCount = 0;
+    lastTime = time;
+    document.getElementById('fps').textContent = `FPS: ${fps}`;
+  }
+  
   updateCamera();
+  updateTrigCache();
   
   gl.viewport(0, 0, canvas.width, canvas.height);
   
@@ -522,37 +594,34 @@ function render(time) {
   if (sky_colors){
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
-
     gl.useProgram(skyProgram);
-
     gl.bindBuffer(gl.ARRAY_BUFFER, skyBuffer);
     gl.enableVertexAttribArray(attribLocations.sky.position);
     gl.vertexAttribPointer(attribLocations.sky.position, 2, gl.FLOAT, false, 0, 0);
-
     gl.uniform3f(uniformLocations.sky.color1, color1[0], color1[1], color1[2]);
     gl.uniform3f(uniformLocations.sky.color2, color2[0], color2[1], color2[2]);
-
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
   
-  // 1. Suelo
+  // Suelo
   gl.disable(gl.DEPTH_TEST);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   
   gl.useProgram(program);
-  
   gl.enableVertexAttribArray(attribLocations.ground.position);
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
   gl.vertexAttribPointer(attribLocations.ground.position, 2, gl.FLOAT, false, 0, 0);
-  
   gl.uniform1f(uniformLocations.ground.spriteCount, tile_items_size);
   gl.uniform4f(uniformLocations.ground.camera, camera.x, camera.y, camera.z, camera.angle);
-  gl.uniform1iv(uniformLocations.ground.tileMap, tileMap);
   
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, spriteTexture);
   gl.uniform1i(uniformLocations.ground.spritesheet, 0);
+  
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, tileMapTexture);
+  gl.uniform1i(uniformLocations.ground.tileMapTexture, 1);
   
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   
@@ -616,10 +685,8 @@ function drawBlocksInstanced(tileType, instances) {
   
   gl.useProgram(blockProgram);
   
-  // Obtener la altura para este tipo de tile
   const height = tile_heights[tileType] || 1;
   
-  // Ahora necesitamos 4 floats por instancia: x, y, z, height
   const instanceData = new Float32Array(instances.length * 4);
   for (let i = 0; i < instances.length; i++) {
     instanceData[i * 4 + 0] = instances[i].x;
@@ -634,10 +701,13 @@ function drawBlocksInstanced(tileType, instances) {
   gl.bindBuffer(gl.ARRAY_BUFFER, cubeBuffer);
   
   gl.enableVertexAttribArray(attribLocations.block.position);
-  gl.vertexAttribPointer(attribLocations.block.position, 3, gl.FLOAT, false, 20, 0);
+  gl.vertexAttribPointer(attribLocations.block.position, 3, gl.FLOAT, false, 32, 0);
   
   gl.enableVertexAttribArray(attribLocations.block.texCoord);
-  gl.vertexAttribPointer(attribLocations.block.texCoord, 2, gl.FLOAT, false, 20, 12);
+  gl.vertexAttribPointer(attribLocations.block.texCoord, 2, gl.FLOAT, false, 32, 12);
+  
+  gl.enableVertexAttribArray(attribLocations.block.normal);
+  gl.vertexAttribPointer(attribLocations.block.normal, 3, gl.FLOAT, false, 32, 20);
   
   gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
   gl.enableVertexAttribArray(attribLocations.block.instanceData);
@@ -648,6 +718,13 @@ function drawBlocksInstanced(tileType, instances) {
   gl.uniform2f(uniformLocations.block.resolution, canvas.width, canvas.height);
   gl.uniform1i(uniformLocations.block.spriteIndex, tileType);
   gl.uniform1f(uniformLocations.block.spriteCount, tile_items_size);
+  
+  gl.uniform1i(uniformLocations.block.illumination, ILLUMINATION);
+  gl.uniform1f(uniformLocations.block.ambient, AMBIENT_LIGHT);
+  gl.uniform1f(uniformLocations.block.diffuse, LIGHT_DIFFUSE);
+  
+  const len = Math.sqrt(lightDir[0]*lightDir[0] + lightDir[1]*lightDir[1] + lightDir[2]*lightDir[2]);
+  gl.uniform3f(uniformLocations.block.lightDir, lightDir[0]/len, lightDir[1]/len, lightDir[2]/len);
   
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, spriteTexture);
@@ -677,27 +754,25 @@ function drawBillboard(billboard) {
   gl.drawArrays(gl.TRIANGLES, 0, 6);
 }
 
-function projectToScreen(worldX, worldZ) {
+function projectToScreen(worldX, worldY) {
   const dx = worldX - camera.x;
-  const dy = worldZ - camera.y;
+  const dy = worldY - camera.y;
 
-  const cosA = Math.cos(-camera.angle);
-  const sinA = Math.sin(-camera.angle);
-
-  const rotX = dx * cosA - dy * sinA;
-  const rotY = dx * sinA + dy * cosA;
+  const rotX = dx * cachedCosA - dy * cachedSinA;
+  const rotY = dx * cachedSinA + dy * cachedCosA;
 
   const horizon = 0.3;
-  const perspective = camera.z / (rotY - 0.001);
+  const invRotY = 1.0 / (rotY - 0.001);
+  const perspective = camera.z * invRotY;
 
-  const screenX = 0.5 + rotX * (1/(rotY - 0.001));
+  const screenX = 0.5 + rotX * invRotY;
   const screenY = 1.0 - (horizon + perspective);
 
   return {
     visible: rotY > 0.1 && screenX >= 0 && screenX <= 1 && screenY >= 0 && screenY <= 1,
     x: screenX,
     y: screenY,
-    size: 1.0 / rotY
+    size: invRotY
   };
 }
 
@@ -706,7 +781,15 @@ function isBlock(n) { return block_tiles_set.has(n); }
 
 // ======= CONTROLES =======
 const keys = {};
-window.addEventListener('keydown', e => keys[e.key] = true);
+window.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  
+  if (e.key === 'l' || e.key === 'L') {
+    ILLUMINATION = !ILLUMINATION;
+    document.getElementById('lightStatus').textContent = ILLUMINATION ? 'ON' : 'OFF';
+    console.log('Iluminación:', ILLUMINATION ? 'ACTIVADA' : 'DESACTIVADA');
+  }
+});
 window.addEventListener('keyup', e => keys[e.key] = false);
 
 function updateCamera() {
@@ -727,7 +810,19 @@ function updateCamera() {
   if (keys['s']) camera.z = Math.max(0.1, camera.z - 0.1);
 }
 
-console.log("Motor 3D Mode7 con Cielo Simple - Flechas: mover | W/S: altura");
+console.log("Motor 3D Mode7 - Compatible Firefox");
+console.log("================================");
+console.log("Controles:");
+console.log("  Flechas = Mover");
+console.log("  W/S = Altura");
+console.log("  L = Toggle Iluminación");
+console.log("================================");
+console.log("Configuración actual:");
+console.log("  Iluminación:", ILLUMINATION ? "ON" : "OFF");
+console.log("  Luz ambiental:", AMBIENT_LIGHT);
+console.log("  Luz difusa:", LIGHT_DIFFUSE);
+console.log("  Dirección luz:", lightDir);
+
 requestAnimationFrame(render);
 </script>
 </body>
