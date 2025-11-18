@@ -573,8 +573,10 @@ function collectRenderableObjects() {
   }
   // Objetos independientes
 for (const obj of independentObjects) {
+  // Lee los valores sin modificar el objeto
   const worldX = obj.x;
-  const worldY = obj.z; // z del objeto es y en el mundo
+  const worldY = obj.y;  // obj.y es la coordenada en el plano
+  const height = obj.z;  // obj.z es la altura
   
   if (!isInFrustum(worldX, worldY)) continue;
   
@@ -582,24 +584,24 @@ for (const obj of independentObjects) {
   const dy = worldY - camY;
   const distSq = dx * dx + dy * dy;
   
-if (isBillboard(obj.tile)) {
-  const proj = projectToScreenWithHeight(worldX, worldY, obj.y);
-  if (proj.visible) {
-    tempObjects[objectCount++] = {
-      type: 'billboard',
-      x: worldX,
-      y: worldY,
-      tile: obj.tile,
-      dist: distSq,
-      proj
-    };
-  }
+  if (isBillboard(obj.tile)) {
+    const proj = projectToScreenWithHeight(worldX, worldY, height);
+    if (proj.visible) {
+      tempObjects[objectCount++] = {
+        type: 'billboard',
+        x: worldX,
+        y: worldY,
+        tile: obj.tile,
+        dist: distSq,
+        proj
+      };
+    }
   } else if (isBlock(obj.tile)) {
     tempObjects[objectCount++] = {
       type: 'block',
       x: worldX,
-      y: worldY, // altura del objeto
-      z: obj.y,
+      y: height,   // altura del objeto
+      z: worldY,   // coordenada Z en el mundo
       tile: obj.tile,
       dist: distSq
     };
