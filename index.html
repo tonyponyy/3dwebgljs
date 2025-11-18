@@ -45,6 +45,14 @@ let camera = {
   angle: 3.0
 };
 
+let independentObjects = [
+  // Ejemplos:
+  { tile: 5, x: 10.5, y: 0.0, z: 10.5 },  // Bloque en (10.5, 10.5)
+  { tile: 7, x: 15.0, y: 0.0, z: 15.0 },  // Bloque más alto
+  { tile: 4, x: 20.5, y: 0.0, z: 20.5 },  // Billboard
+  { tile: 8, x: 25.0, y: 0.0, z: 12.0 },  // Otro bloque
+];
+
 const canvas = document.getElementById('glCanvas');
 const gl = canvas.getContext('webgl2', {
   alpha: false,
@@ -517,7 +525,7 @@ function isInFrustum(worldX, worldY) {
 }
 
 // ======= RECOLECTAR OBJETOS =======
-const tempObjects = new Array(MAP_WIDTH * MAP_HEIGHT);
+const tempObjects = new Array(MAP_WIDTH * MAP_HEIGHT + 1000); 
 let objectCount = 0;
 
 function collectRenderableObjects() {
@@ -563,10 +571,66 @@ function collectRenderableObjects() {
       };
     }
   }
+  // Objetos independientes
+for (const obj of independentObjects) {
+  const worldX = obj.x;
+  const worldY = obj.z; // z del objeto es y en el mundo
+  
+  if (!isInFrustum(worldX, worldY)) continue;
+  
+  const dx = worldX - camX;
+  const dy = worldY - camY;
+  const distSq = dx * dx + dy * dy;
+  
+if (isBillboard(obj.tile)) {
+  const proj = projectToScreenWithHeight(worldX, worldY, obj.y);
+  if (proj.visible) {
+    tempObjects[objectCount++] = {
+      type: 'billboard',
+      x: worldX,
+      y: worldY,
+      tile: obj.tile,
+      dist: distSq,
+      proj
+    };
+  }
+  } else if (isBlock(obj.tile)) {
+    tempObjects[objectCount++] = {
+      type: 'block',
+      x: worldX,
+      y: worldY, // altura del objeto
+      z: obj.y,
+      tile: obj.tile,
+      dist: distSq
+    };
+  }
+}
   
   const objects = tempObjects.slice(0, objectCount);
   objects.sort((a, b) => b.dist - a.dist);
   return objects;
+}
+
+function projectToScreenWithHeight(worldX, worldY, height) {
+  const dx = worldX - camera.x;
+  const dy = worldY - camera.y;
+
+  const rotX = dx * cachedCosA - dy * cachedSinA;
+  const rotY = dx * cachedSinA + dy * cachedCosA;
+
+  const horizon = 0.3;
+  const invRotY = 1.0 / (rotY - 0.001);
+  const perspective = (camera.z - height) * invRotY;  // ← AQUÍ se usa la altura
+
+  const screenX = 0.5 + rotX * invRotY;
+  const screenY = 1.0 - (horizon + perspective);
+
+  return {
+    visible: rotY > 0.1 && screenX >= 0 && screenX <= 1 && screenY >= 0 && screenY <= 1,
+    x: screenX,
+    y: screenY,
+    size: invRotY
+  };
 }
 
 let sky_colors = true;
