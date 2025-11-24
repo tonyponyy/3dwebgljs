@@ -26,11 +26,18 @@
 <canvas id="glCanvas" width="960" height="540"></canvas>
 <div id="controls">
   <div><span id="fps">FPS: 0</span></div>
+  <div><span id="vx">0</span></div>
+    <div><span id="vy">0</span></div>
+    <div><span id="v">0</span></div>
+
   <div>Controles: Flechas = mover | W/S = altura</div>
   <div>L = Toggle iluminación | <span id="lightStatus">ON</span></div>
 </div>
 <script src="image64.js"></script>
 <script src="test48.js"></script>
+<script src="collision.js"></script>
+<script src="player.js"></script>
+<script src="camera.js"></script>
 <script>
 // ======= CONFIGURACIÓN ILUMINACIÓN =======
 let ILLUMINATION = true;
@@ -45,20 +52,26 @@ let camera = {
   angle: 3.0
 };
 
+let playerObject = { tile: 11, x: 10.5, y: 0.5, z: 0.0 };
 let independentObjects = [
-  // Ejemplos:
-  { tile: 5, x: 10.5, y: 0.0, z: 10.5 },  // Bloque en (10.5, 10.5)
-  { tile: 7, x: 15.0, y: 0.0, z: 15.0 },  // Bloque más alto
-  { tile: 4, x: 20.5, y: 0.0, z: 20.5 },  // Billboard
-  { tile: 8, x: 25.0, y: 0.0, z: 12.0 },  // Otro bloque
+  playerObject,  // El primer objeto es el jugador
+  { tile: 7, x: 15.0, y: 15.0, z: 0.0 },
+  { tile: 4, x: 20.5, y: 20.5, z: 0.0 },
+  { tile: 8, x: 25.0, y: 12.0, z: 0.0 }
 ];
+let tileMap = TileMaps["test48"].layers[0].data
+
+
+const player = initPlayer(playerObject, tileMap, independentObjects);
+
+
 
 const canvas = document.getElementById('glCanvas');
 const gl = canvas.getContext('webgl2', {
   alpha: false,
   depth: true,
   stencil: false,
-  antialias: false,
+  antialias: true,
   premultipliedAlpha: false,
   preserveDrawingBuffer: false,
   powerPreference: 'high-performance'
@@ -76,20 +89,21 @@ canvas.style.height = CANVAS_HEIGHT + 'px';
 
 // ======= Configuración =======
 const TILE_SIZE = 32;
-const MAP_WIDTH = 48;
-const MAP_HEIGHT = 48;
-const MAX_RENDER_DISTANCE = 60.0;
-const FRUSTUM_MARGIN = 0.2;
+const MAP_WIDTH = 100;
+const MAP_HEIGHT = 100;
+let MAX_RENDER_DISTANCE = 50;
+let FRUSTUM_MARGIN = 0.4;
 
-let billboard_tiles = [4,3,9,10];
-let block_tiles = [5,7,8];
+let billboard_tiles = [4,3,9,10,11];
+let block_tiles = [5,6,7,8];
 const billboard_tiles_set = new Set(billboard_tiles);
 const block_tiles_set = new Set(block_tiles);
 
 const tile_heights = {
   5: 4,
   7: 8,
-  8:10
+  8:10,
+  6:10
 
 };
 
@@ -136,7 +150,7 @@ image.src = image_64;
 let color1 = [0.5, 0.7, 1.0];
 let color2 = [0.1, 0.3, 0.8];
 
-let tileMap = TileMaps["test48"].layers[0].data
+//let tileMap = TileMaps["test48"].layers[0].data
 
 // ======= SHADER CIELO =======
 const skyVS = `#version 300 es
@@ -189,7 +203,7 @@ void main() {
   float screenY = 1.0 - v_texCoord.y;
   float perspective = u_camera.z / (screenY - horizon);
 
-  if (perspective < 0.0 || perspective > 500.0) {
+  if (perspective < 0.0 || perspective > ${MAX_RENDER_DISTANCE}.0) {
     discard;
   }
 
@@ -289,7 +303,7 @@ void main() {
   float rotX = dx * cosA - dy * sinA;
   float rotY = dx * sinA + dy * cosA;
   
-  if (rotY < 0.1) {
+  if (rotY < 0.5) {
     gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
     v_texCoord = a_texCoord;
     v_depth = -1.0;
@@ -305,11 +319,12 @@ void main() {
   gl_Position = vec4(
     screenX * 2.0 - 1.0,
     screenY * 2.0 - 1.0,
-    rotY / 50.0,
+    rotY / ${MAX_RENDER_DISTANCE}.0,
     1.0
   );
   
-  v_texCoord = vec2(a_texCoord.x, a_texCoord.y * height);
+  float isVertical = 1.0 - abs(a_normal.y);
+  v_texCoord = vec2(a_texCoord.x, a_texCoord.y * mix(1.0, height, isVertical));
   v_depth = rotY;
   v_height = height;
   v_normal = a_normal;
@@ -365,12 +380,13 @@ const cubeVertices = new Float32Array([
   -0.5, 1.0,  0.5,  0, 1,  0, 0, 1,
 
   // Cara trasera (Z-) - Normal: (0, 0, -1)
-   0.5, 0.0, -0.5,  0, 0,  0, 0, -1,
-  -0.5, 0.0, -0.5,  1, 0,  0, 0, -1,
-  -0.5, 1.0, -0.5,  1, 1,  0, 0, -1,
-   0.5, 0.0, -0.5,  0, 0,  0, 0, -1,
-  -0.5, 1.0, -0.5,  1, 1,  0, 0, -1,
-   0.5, 1.0, -0.5,  0, 1,  0, 0, -1,
+    // Cara trasera (Z-) - Normal: (0, 0, -1)
+   0.5, 0.0, -0.5,  1, 0,  0, 0, -1,
+  -0.5, 0.0, -0.5,  0, 0,  0, 0, -1,
+  -0.5, 1.0, -0.5,  0, 1,  0, 0, -1,
+   0.5, 0.0, -0.5,  1, 0,  0, 0, -1,
+  -0.5, 1.0, -0.5,  0, 1,  0, 0, -1,
+   0.5, 1.0, -0.5,  1, 1,  0, 0, -1,
 
   // Cara izquierda (X-) - Normal: (-1, 0, 0)
   -0.5, 0.0, -0.5,  0, 0,  -1, 0, 0,
@@ -622,13 +638,14 @@ function projectToScreenWithHeight(worldX, worldY, height) {
 
   const horizon = 0.3;
   const invRotY = 1.0 / (rotY - 0.001);
+  
   const perspective = (camera.z - height) * invRotY;  // ← AQUÍ se usa la altura
 
   const screenX = 0.5 + rotX * invRotY;
   const screenY = 1.0 - (horizon + perspective);
 
   return {
-    visible: rotY > 0.1 && screenX >= 0 && screenX <= 1 && screenY >= 0 && screenY <= 1,
+    visible: rotY > 0.01 && screenX >= 0 && screenX <= 1 && screenY >= -3 && screenY <= 1,
     x: screenX,
     y: screenY,
     size: invRotY
@@ -649,8 +666,12 @@ function render(time) {
     frameCount = 0;
     lastTime = time;
     document.getElementById('fps').textContent = `FPS: ${fps}`;
+    document.getElementById('vx').textContent = `vx: ${player.vx}`;
+    document.getElementById('vy').textContent = `vy: ${player.vy}`;
+    document.getElementById('v').textContent = `vy: ${Math.abs(player.vy)+Math.abs(player.vx)}`;
+
   }
-  
+  updatePlayer(player, keys);
   updateCamera();
   updateTrigCache();
   
@@ -817,7 +838,14 @@ function drawBillboard(billboard) {
   gl.bindTexture(gl.TEXTURE_2D, spriteTexture);
   gl.uniform1i(uniformLocations.billboard.spritesheet, 0);
   
+  // Ajuste de depth para evitar z-fighting
+  gl.depthFunc(gl.LEQUAL);
+  gl.polygonOffset(-1.0, -1.0);
+  gl.enable(gl.POLYGON_OFFSET_FILL);
+  
   gl.drawArrays(gl.TRIANGLES, 0, 6);
+  
+  gl.disable(gl.POLYGON_OFFSET_FILL);
 }
 
 function projectToScreen(worldX, worldY) {
@@ -835,7 +863,7 @@ function projectToScreen(worldX, worldY) {
   const screenY = 1.0 - (horizon + perspective);
 
   return {
-    visible: rotY > 0.1 && screenX >= 0 && screenX <= 1 && screenY >= 0 && screenY <= 1,
+    visible: rotY > -3 && screenX >= -3 && screenX <= 1 && screenY >= -3 && screenY <= 1,
     x: screenX,
     y: screenY,
     size: invRotY
@@ -858,6 +886,7 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => keys[e.key] = false);
 
+/*
 function updateCamera() {
   const speed = 0.2;
   const rotSpeed = 0.05;
@@ -874,6 +903,10 @@ function updateCamera() {
   if (keys['ArrowRight']) camera.angle -= rotSpeed;
   if (keys['w']) camera.z += 0.1;
   if (keys['s']) camera.z = Math.max(0.1, camera.z - 0.1);
+}*/
+
+function updateCamera() {
+  updatePlayerCamera(camera, player);
 }
 
 console.log("Motor 3D Mode7 - Compatible Firefox");
