@@ -33,6 +33,28 @@
   <div>Controles: Flechas = mover | W/S = altura</div>
   <div>L = Toggle iluminación | <span id="lightStatus">ON</span></div>
 </div>
+<script>
+// ======= Configuración =======
+
+let MAX_RENDER_DISTANCE = 50;
+let FRUSTUM_MARGIN = 0.4;
+
+let billboard_tiles = [4,3,9,10,11];
+let block_tiles = [5,6,7,8];
+const billboard_tiles_set = new Set(billboard_tiles);
+const block_tiles_set = new Set(block_tiles);
+
+const tile_heights = {
+  5: 4,
+  7: 8,
+  8:10,
+  6:10
+
+};
+const TILE_SIZE = 32;
+const MAP_WIDTH = 100;
+const MAP_HEIGHT = 100;
+</script>
 <script src="image64.js"></script>
 <script src="test48.js"></script>
 <script src="collision.js"></script>
@@ -87,25 +109,7 @@ canvas.height = CANVAS_HEIGHT * RENDER_SCALE;
 canvas.style.width = CANVAS_WIDTH + 'px';
 canvas.style.height = CANVAS_HEIGHT + 'px';
 
-// ======= Configuración =======
-const TILE_SIZE = 32;
-const MAP_WIDTH = 100;
-const MAP_HEIGHT = 100;
-let MAX_RENDER_DISTANCE = 50;
-let FRUSTUM_MARGIN = 0.4;
 
-let billboard_tiles = [4,3,9,10,11];
-let block_tiles = [5,6,7,8];
-const billboard_tiles_set = new Set(billboard_tiles);
-const block_tiles_set = new Set(block_tiles);
-
-const tile_heights = {
-  5: 4,
-  7: 8,
-  8:10,
-  6:10
-
-};
 
 let tile_items_size = 6;
 
