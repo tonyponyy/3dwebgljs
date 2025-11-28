@@ -1,0 +1,131 @@
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Motor 3D - Iluminación Configurable</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #333; }
+    canvas { display: block; }
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-family: monospace;
+      background: rgba(0,0,0,0.7);
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 14px;
+    }
+    #fps {
+      color: #0f0;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+<canvas id="glCanvas" width="960" height="540"></canvas>
+<div id="controls">
+  <div><span id="fps">FPS: 0</span></div>
+  <div><span id="vx">0</span></div>
+    <div><span id="vy">0</span></div>
+    <div><span id="v">0</span></div>
+
+  <div>Controles: Flechas = mover | W/S = altura</div>
+  <div>L = Toggle iluminación | <span id="lightStatus">ON</span></div>
+</div>
+<script>
+// ====== Control de flechas
+// ======= CONTROLES =======
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  
+  if (e.key === 'l' || e.key === 'L') {
+    ILLUMINATION = !ILLUMINATION;
+    document.getElementById('lightStatus').textContent = ILLUMINATION ? 'ON' : 'OFF';
+    console.log('Iluminación:', ILLUMINATION ? 'ACTIVADA' : 'DESACTIVADA');
+  }
+});
+window.addEventListener('keyup', e => keys[e.key] = false);
+// ======= Configuración =======
+
+let MAX_RENDER_DISTANCE = 50;
+let FRUSTUM_MARGIN = 0.4;
+
+let billboard_tiles = [4,3,9,10,11];
+let block_tiles = [5,6,7,8];
+const billboard_tiles_set = new Set(billboard_tiles);
+const block_tiles_set = new Set(block_tiles);
+
+const tile_heights = {
+  5: 4,
+  7: 8,
+  8:10,
+  6:10
+
+};
+const TILE_SIZE = 32;
+const MAP_WIDTH = 100;
+const MAP_HEIGHT = 100;
+</script>
+<script src="image64.js"></script>
+<script src="test48.js"></script>
+<script src="collision.js"></script>
+<script src="glitter7engine.js"></script>
+<script src="camera.js"></script>
+<script src="player.js"></script>
+<script>
+    // Crear el motor
+const canvas = document.getElementById('glCanvas');
+const engine = new Glitter7engine(canvas, {
+  maxRenderDistance: 50,
+  mapWidth: 100,
+  mapHeight: 100,
+  billboardTiles: [4, 3, 9, 10, 11],
+blockTiles: [5, 6, 7, 8],
+tileHeights: { 5: 4, 7: 8, 8: 10, 6: 10 },
+illumination: true,
+ambientLight: 0.5,
+lightDiffuse: 0.7,
+lightDir: [0.3, 0.7, 0.5]
+});
+// Cargar recursos
+tileMap = TileMaps["test48"].layers[0].data
+engine.loadSpritesheet(image_64);
+engine.setTileMap(tileMap);
+// Configurar cámara
+const camera = {
+x: 24.0,
+y: 24.0,
+z: 1.0,
+angle: 3.0
+};
+let playerObject = { tile: 11, x: 10.5, y: 0.5, z: 0.0 };
+// Objetos independientes
+const independentObjects = [
+playerObject,
+{ tile: 11, x: 10.5, y: 0.5, z: 0.0 },
+{ tile: 7, x: 15.0, y: 15.0, z: 0.0 },
+{ tile: 4, x: 20.5, y: 20.5, z: 0.0 },
+{ tile: 8, x: 25.0, y: 12.0, z: 0.0 }
+];
+const player = initPlayer(playerObject, tileMap, independentObjects);
+
+// Loop de render
+function gameLoop() {
+// Actualizar cámara aquí
+// Renderizar
+engine.render(camera, independentObjects, true);
+updatePlayer(player, keys);
+updateCamera();
+requestAnimationFrame(gameLoop);
+}
+gameLoop();
+
+function updateCamera() {
+  updatePlayerCamera(camera, player);
+}
+
+</script>
+</body>
+</html>
