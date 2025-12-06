@@ -32,6 +32,15 @@ class Glitter7engine {
     this.color1 = config.skyColor1 || [0.5, 0.7, 1.0];
     this.color2 = config.skyColor2 || [0.1, 0.3, 0.8];
     
+    // Skydome
+    this.SKYDOME_ENABLED = config.skydomeEnabled !== undefined ? config.skydomeEnabled : false;
+    this.SKYDOME_RADIUS = config.skydomeRadius || 100;
+    this.SKYDOME_SEGMENTS = config.skydomeSegments || 32;
+    this.skydomeTexture = null;
+    this.skydome_rep_h = 4;
+    this.skydome_vert_ajust = '12.5'
+
+
     // WebGL Context
     let contextOptions = this.canvas.getContext('webgl2', {
       alpha: false,
@@ -90,6 +99,14 @@ class Glitter7engine {
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+    // Textura del skydome
+    this.skydomeTexture = this.gl.createTexture();
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.skydomeTexture);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.REPEAT);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.REPEAT);
+
   }
   
   initShaders() {
@@ -98,6 +115,7 @@ class Glitter7engine {
     this.billboardProgram = this.createProgram(this.getBillboardVS(), this.getBillboardFS());
     this.blockProgram = this.createProgram(this.getBlockVS(), this.getBlockFS());
     this.skyProgram = this.createProgram(this.getSkyVS(), this.getSkyFS());
+    this.skydomeProgram = this.createProgram(this.getSkydomeVS(), this.getSkydomeFS());
   }
   
   createShader(type, source) {
@@ -148,6 +166,43 @@ class Glitter7engine {
       outColor = vec4(mix(u_color1, u_color2, t), 1.0);
     }`;
   }
+getSkydomeVS() {
+  return `#version 300 es
+  in vec3 a_position;
+  uniform mat4 u_viewMatrix;
+  uniform mat4 u_projMatrix;
+  out vec3 v_position;
+  
+  void main() {
+    v_position = a_position;
+    vec4 worldPos = vec4(a_position, 1.0);
+    vec4 viewPos = u_viewMatrix * worldPos;
+    gl_Position = u_projMatrix * viewPos;
+  }`;
+}
+
+getSkydomeFS() {
+  return `#version 300 es
+  precision highp float;
+  in vec3 v_position;
+  out vec4 outColor;
+  uniform sampler2D u_skydomeTexture;
+  
+  void main() {
+    // Calcular UV en el fragment shader para mejor interpolación
+    vec3 norm = normalize(v_position);
+    
+    float u = atan(norm.z, norm.x) / (2.0 * 3.14159265359) + 0.5;
+    //float v = asin(clamp(norm.y, -0.999, 0.999)) / 3.14159265359 + 0.5;
+    float v = (asin(clamp(norm.y, -0.999, 0.999)) / 3.14159265359 + 0.5);
+    v = v * ${this.skydome_vert_ajust} + 0.15; // mueve y estira — AJUSTABLE
+
+    //v = v * 0.6 - 0.4; // Ocupa el 60% inferior
+    vec2 texCoord = vec2(u*${this.skydome_rep_h}.0, v);
+    outColor = texture(u_skydomeTexture, texCoord);
+  }`;
+}
+
   
   getGroundVS() {
     return `#version 300 es
@@ -368,6 +423,12 @@ class Glitter7engine {
     this.skyBuffer = this.gl.createBuffer();
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.skyBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), this.gl.STATIC_DRAW);
+    // buffer skydome
+    this.skydomeBuffer = this.gl.createBuffer();
+    this.skydomeIndexBuffer = this.gl.createBuffer();
+    this.createSkydomeGeometry();
+
+  
   }
   
   getCubeVertices() {
@@ -421,9 +482,56 @@ class Glitter7engine {
       -0.5, 0.0,  0.5,  0, 1,  0, -1, 0
     ]);
   }
+createSkydomeGeometry() {
+  const vertices = [];
+  const indices = [];
+  const radius = this.SKYDOME_RADIUS;
+  const segments = this.SKYDOME_SEGMENTS;
+  const rings = Math.floor(segments / 2);
+  
+  // Generar vértices (evitando los polos exactos)
+  for (let ring = 0; ring <= rings; ring++) {
+    const phi = (ring / rings) * Math.PI * 0.95; // 0.95 para evitar singularidad en polos
+    const y = radius * Math.cos(phi);
+    const ringRadius = radius * Math.sin(phi);
+    
+    for (let seg = 0; seg <= segments; seg++) {
+      const theta = (seg / segments) * Math.PI * 2;
+      const x = ringRadius * Math.cos(theta);
+      const z = ringRadius * Math.sin(theta);
+      
+      vertices.push(x, y, z);
+    }
+  }
+  
+  // Generar índices
+  for (let ring = 0; ring < rings; ring++) {
+    for (let seg = 0; seg < segments; seg++) {
+      const current = ring * (segments + 1) + seg;
+      const next = current + segments + 1;
+      
+      indices.push(current, next, current + 1);
+      indices.push(current + 1, next, next + 1);
+    }
+  }
+  
+  this.skydomeVertexCount = indices.length;
+  
+  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.skydomeBuffer);
+  this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(vertices), this.gl.STATIC_DRAW);
+  
+  this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.skydomeIndexBuffer);
+  this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), this.gl.STATIC_DRAW);
+}
   
   initUniforms() {
     this.uniformLocations = {
+
+      skydome: {
+      viewMatrix: this.gl.getUniformLocation(this.skydomeProgram, 'u_viewMatrix'),
+      projMatrix: this.gl.getUniformLocation(this.skydomeProgram, 'u_projMatrix'),
+      skydomeTexture: this.gl.getUniformLocation(this.skydomeProgram, 'u_skydomeTexture')
+    },
       ground: {
         spriteCount: this.gl.getUniformLocation(this.program, 'u_spriteCount'),
         camera: this.gl.getUniformLocation(this.program, 'u_camera'),
@@ -455,6 +563,10 @@ class Glitter7engine {
     };
     
     this.attribLocations = {
+      skydome: {
+        position: this.gl.getAttribLocation(this.skydomeProgram, 'a_position')
+      },
+
       ground: {
         position: this.gl.getAttribLocation(this.program, 'a_position')
       },
@@ -493,6 +605,21 @@ class Glitter7engine {
       image.src = imageSource;
     });
   }
+  loadSkydomeTexture(imageSource) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    
+    image.onload = () => {
+      this.gl.bindTexture(this.gl.TEXTURE_2D, this.skydomeTexture);
+      this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
+      this.gl.generateMipmap(this.gl.TEXTURE_2D);
+      resolve();
+    };
+    
+    image.onerror = () => reject(new Error('Error al cargar textura del skydome'));
+    image.src = imageSource;
+  });
+}
   
   // Actualizar el tilemap
   setTileMap(tileMap) {
@@ -686,6 +813,68 @@ class Glitter7engine {
     this.gl.uniform3f(this.uniformLocations.sky.color2, this.color2[0], this.color2[1], this.color2[2]);
     this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
   }
+  renderSkydome(camera) {
+  if (!this.SKYDOME_ENABLED || !this.skydomeTexture) return;
+  
+  this.gl.disable(this.gl.DEPTH_TEST);
+  this.gl.disable(this.gl.BLEND);
+  this.gl.enable(this.gl.BLEND);
+  this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
+
+  
+  this.gl.useProgram(this.skydomeProgram);
+  
+  // Matrices
+  const viewMatrix = this.createViewMatrix(camera);
+  const projMatrix = this.createProjectionMatrix();
+  
+  this.gl.uniformMatrix4fv(this.uniformLocations.skydome.viewMatrix, false, viewMatrix);
+  this.gl.uniformMatrix4fv(this.uniformLocations.skydome.projMatrix, false, projMatrix);
+  
+  // Textura
+  this.gl.activeTexture(this.gl.TEXTURE0);
+  this.gl.bindTexture(this.gl.TEXTURE_2D, this.skydomeTexture);
+  this.gl.uniform1i(this.uniformLocations.skydome.skydomeTexture, 0);
+  
+  // Geometría
+  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.skydomeBuffer);
+  this.gl.enableVertexAttribArray(this.attribLocations.skydome.position);
+  this.gl.vertexAttribPointer(this.attribLocations.skydome.position, 3, this.gl.FLOAT, false, 0, 0);
+  
+  this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.skydomeIndexBuffer);
+  this.gl.drawElements(this.gl.TRIANGLES, this.skydomeVertexCount, this.gl.UNSIGNED_SHORT, 0);
+}
+createViewMatrix(camera) {
+  const mat = new Float32Array(16);
+  const cosA = Math.cos(camera.angle);
+  const sinA = Math.sin(camera.angle);
+  
+  // Rotación Y + Traslación (la cámara está en el centro del skydome)
+  mat[0] = cosA; mat[1] = 0; mat[2] = sinA; mat[3] = 0;
+  mat[4] = 0; mat[5] = 1; mat[6] = 0; mat[7] = 0;
+  mat[8] = -sinA; mat[9] = 0; mat[10] = cosA; mat[11] = 0;
+  mat[12] = 0; mat[13] = -camera.z; mat[14] = 0; mat[15] = 1;
+  
+  return mat;
+}
+
+createProjectionMatrix() {
+  const mat = new Float32Array(16);
+  const fov = 60 * Math.PI / 180;
+  const aspect = this.canvas.width / this.canvas.height;
+  const near = 0.1;
+  const far = this.SKYDOME_RADIUS * 2;
+  
+  const f = 1.0 / Math.tan(fov / 2);
+  mat[0] = f / aspect;
+  mat[5] = f;
+  mat[10] = (far + near) / (near - far);
+  mat[11] = -1;
+  mat[14] = (2 * far * near) / (near - far);
+  
+  return mat;
+}
+
   
   // Renderizar suelo
   renderGround(camera) {
@@ -803,7 +992,9 @@ class Glitter7engine {
     if (renderSky) {
       this.renderSky();
     }
-    
+    if (this.SKYDOME_ENABLED) {
+      this.renderSkydome(camera);
+    }
     // Suelo
     this.renderGround(camera);
     
@@ -898,4 +1089,15 @@ class Glitter7engine {
     this.canvas.style.width = width + 'px';
     this.canvas.style.height = height + 'px';
   }
+
+  enableSkydome(enabled) {
+    this.SKYDOME_ENABLED = enabled;
+  }
+
+  setSkydomeRadius(radius) {
+    this.SKYDOME_RADIUS = radius;
+    this.createSkydomeGeometry();
+  }
+
+
 }

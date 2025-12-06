@@ -87,11 +87,27 @@ tileHeights: { 5: 4, 7: 8, 8: 10, 6: 10 },
 illumination: true,
 ambientLight: 0.5,
 lightDiffuse: 0.7,
-lightDir: [0.3, 0.7, 0.5]
+lightDir: [0.3, 0.7, 0.5],
+ skydomeEnabled: true,
+  skydomeRadius: 100,
+  skydomeSegments: 32
 });
 // Cargar recursos
 tileMap = TileMaps["test48"].layers[0].data
-engine.loadSpritesheet(image_64);
+
+//para desplegar en local, se puede pasar directamente el base 64 a loadSkydome y loadspritesheet
+imageToBase64("img/img_cielo.png", (img) => engine.loadSkydomeTexture(img))
+imageToBase64("img/tilesheet.png", (img) => engine.loadSpritesheet(img))
+/*
+let img_cielo = canvas.toDataURL("img/img_cielo.png");
+async function init() {
+  await engine.loadSkydomeTexture(img_cielo);
+  console.log('Skydome cargado');
+}
+*/
+
+
+//engine.loadSkydomeTexture(img_cielo);
 engine.setTileMap(tileMap);
 // Configurar cámara
 const camera = {
@@ -125,6 +141,29 @@ gameLoop();
 function updateCamera() {
   updatePlayerCamera(camera, player);
 }
+
+//función auxiliar para pasar a base64 las imagenes
+function imageToBase64(url, callback) {
+    const img = new Image();
+    img.crossOrigin = "Anonymous"; // necesario si la imagen está en otro dominio
+
+    img.onload = function() {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+
+        const base64 = canvas.toDataURL("image/png");
+        callback(base64);
+    };
+
+    img.src = url;
+}
+
+
+
 
 </script>
 </body>
