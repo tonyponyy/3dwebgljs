@@ -75,25 +75,48 @@ const MAP_HEIGHT = 100;
 <script src="camera.js"></script>
 <script src="player.js"></script>
 <script>
+ //recursos
+ tileMap = TileMaps["test48"].layers[0].data
+
     // Crear el motor
 const canvas = document.getElementById('glCanvas');
 const engine = new Glitter7engine(canvas, {
-  maxRenderDistance: 50,
+
+  //obligatorio:
+  map :{
+  array: tileMap,
   mapWidth: 100,
   mapHeight: 100,
+  },
+  tileSize:32,
+  maxRenderDistance: 100,
+  
   billboardTiles: [4, 3, 9, 10, 11],
-blockTiles: [5, 6, 7, 8],
-tileHeights: { 5: 4, 7: 8, 8: 10, 6: 10 },
-illumination: true,
-ambientLight: 0.5,
-lightDiffuse: 0.7,
-lightDir: [0.3, 0.7, 0.5],
- skydomeEnabled: true,
-  skydomeRadius: 100,
-  skydomeSegments: 32
+  blockTiles: [5, 6, 7, 8],
+  tileHeights: { 5: 4, 7: 8, 8: 10, 6: 10 },
+  light:{
+    illumination: true,
+    ambientLight: 0.5,
+    lightDiffuse: 0.7,
+    lightDir: [0.3, 0.7, 0.5]
+  },
+  skydome:{
+    enabled:true,
+    radius:100,
+    segments:12,
+    rep_h:1,
+    rep_v:7
+  },
+  fog:{
+    enabled:true,
+    start:60,
+    end:100,
+    color: [0.5, 0.5, 0.5]
+  }
+
 });
 // Cargar recursos
-tileMap = TileMaps["test48"].layers[0].data
+
 
 //para desplegar en local, se puede pasar directamente el base 64 a loadSkydome y loadspritesheet
 imageToBase64("img/img_cielo.png", (img) => engine.loadSkydomeTexture(img))
@@ -108,14 +131,14 @@ async function init() {
 
 
 //engine.loadSkydomeTexture(img_cielo);
-engine.setTileMap(tileMap);
+//engine.setTileMap(tileMap);
 // Configurar cámara
-const camera = {
+/*const camera = {
 x: 24.0,
 y: 24.0,
 z: 1.0,
 angle: 3.0
-};
+};*/
 let playerObject = { tile: 11, x: 10.5, y: 0.5, z: 0.0 };
 // Objetos independientes
 const independentObjects = [
@@ -126,39 +149,36 @@ playerObject,
 { tile: 8, x: 25.0, y: 12.0, z: 0.0 }
 ];
 const player = initPlayer(playerObject, tileMap, independentObjects);
+applyMovementPreset('REALISTIC');
 
 // Loop de render
 function gameLoop() {
-// Actualizar cámara aquí
-// Renderizar
-engine.render(camera, independentObjects, true);
-updatePlayer(player, keys);
-updateCamera();
-requestAnimationFrame(gameLoop);
+  // Actualizar cámara aquí
+  // Renderizar
+  engine.render(independentObjects, true);
+  updatePlayer(player, keys);
+  updateCamera();
+  requestAnimationFrame(gameLoop);
 }
 gameLoop();
 
 function updateCamera() {
-  updatePlayerCamera(camera, player);
+  updatePlayerCamera(engine.camera, player);
 }
 
 //función auxiliar para pasar a base64 las imagenes
 function imageToBase64(url, callback) {
     const img = new Image();
     img.crossOrigin = "Anonymous"; // necesario si la imagen está en otro dominio
-
     img.onload = function() {
         const canvas = document.createElement("canvas");
         canvas.width = img.width;
         canvas.height = img.height;
-
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0);
-
         const base64 = canvas.toDataURL("image/png");
         callback(base64);
     };
-
     img.src = url;
 }
 

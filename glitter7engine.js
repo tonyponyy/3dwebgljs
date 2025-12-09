@@ -3,53 +3,111 @@
 //  ██  ▄▄▄ ██    ██   ██     ██   ██▄▄  ██▄█▄   ▄██▀ ██▄▄   ███▄██ ██ ▄▄ ██ ███▄██ ██▄▄  V.0.0.1 alpha
 //   ▀███▀  ██▄▄▄ ██   ██     ██   ██▄▄▄ ██ ██  ██▀   ██▄▄▄▄ ██ ▀██ ▀███▀ ██ ██ ▀██ ██▄▄▄  By TonyPonyy
                                                                                       
+//constantes
+
+    const FOG_ENABLED_DEFAULT = true;
+    const FOG_START_DEFAULT = 30;
+    const FOG_END_DEFAULT = 80;
+    const CANVAS_POWER_PREFERENCE_DEFAULT = 'default'; 
+    const CANVAS_ANTIALIAS_DEFAULT = true; 
+    const SKYDOME_HORIZONTAL_REP_DEFAULT = '1'
+    const SKYDOME_VERTICAL_REP_DEFAULT = '1'
+    const SKYDOME_RADIUS_DEFAULT = 100;
+    const SKYDOME_SEGMENTS_DEFAULT =32;
+    const SKYDOME_ENABLED_DEFAULT = false;
+    const MAX_RENDER_DISTANCE_DEFAULT = 100;
+    const FRUSTUM_MARGIN_DEFAULT = 0.4
+
+
 class Glitter7engine {
   constructor(canvas, config = {}) {
     this.canvas = canvas;
+    //creamos la camara
+    this.camera ={x:0,y:0,z:0,angle:0};
     
     // Configuración
-    this.MAX_RENDER_DISTANCE = config.maxRenderDistance || 100;
-    this.FRUSTUM_MARGIN = config.frustumMargin || 0.4;
-    this.TILE_SIZE = config.tileSize || 32;
-    this.MAP_WIDTH = config.mapWidth || 100;
-    this.MAP_HEIGHT = config.mapHeight || 100;
-    this.RENDER_SCALE = config.renderScale || 1.0;
+    this.MAX_RENDER_DISTANCE = config.maxRenderDistance || MAX_RENDER_DISTANCE_DEFAULT;
+    this.FRUSTUM_MARGIN = this.transformNumber(( config.frustumMargin || 0.4));
+    this.TILE_SIZE = this.transformNumber(config.tileSize) ;
+    this.MAP_WIDTH = config.map.mapWidth ;
+    this.MAP_HEIGHT = config.map.mapHeight ;
+    this.RENDER_SCALE = this.transformNumber((config.renderScale || 1.0));
     
     // Tiles
-    this.billboard_tiles = config.billboardTiles || [4,3,9,10,11];
-    this.block_tiles = config.blockTiles || [5,6,7,8];
+    this.billboard_tiles = config.billboardTiles || [];
+    this.block_tiles = config.blockTiles || [];
     this.billboard_tiles_set = new Set(this.billboard_tiles);
     this.block_tiles_set = new Set(this.block_tiles);
-    this.tile_heights = config.tileHeights || {5: 4, 7: 8, 8: 10, 6: 10};
+    this.tile_heights = config.tileHeights || {};
     
     // Iluminación
-    this.ILLUMINATION = config.illumination !== undefined ? config.illumination : true;
-    this.AMBIENT_LIGHT = config.ambientLight || 0.5;
-    this.LIGHT_DIFFUSE = config.lightDiffuse || 0.7;
-    this.lightDir = config.lightDir || [0.3, 0.7, 0.5];
+    if (config.light !=null){
+      this.ILLUMINATION = config.light.illumination !== undefined ? config.light.illumination : true;
+      this.AMBIENT_LIGHT = config.light.ambientLight || 0.5;
+      this.LIGHT_DIFFUSE = config.light.lightDiffuse || 0.7;
+      this.lightDir = config.light.lightDir || [0.3, 0.7, 0.5];
+    }else{
+      this.ILLUMINATION=true,
+      this.AMBIENT_LIGHT =0.5;
+      this.LIGHT_DIFFUSE = 0.7;
+      this.lightDir = [0.3, 0.7, 0.5]
+    }
+     
+    if (config.camera){
+      this.camera.x = config.camera.x || 0;
+      this.camera.y = config.camera.y || 0;
+      this.camera.z = config.camera.z || 0;
+      this.angle =  config.camera.angle || 0;
+    }
     
     // Colores del cielo
-    this.color1 = config.skyColor1 || [0.5, 0.7, 1.0];
-    this.color2 = config.skyColor2 || [0.1, 0.3, 0.8];
+    if (config.background != null){
+      this.color1 = config.background.color1 || [0.5, 0.7, 1.0];
+      this.color2 = config.background.color2 || this.color1;
+    }else{
+      this.color1 = [0.5, 0.7, 1.0];
+      this.color2 = this.color1;
+    }
     
     // Skydome
-    this.SKYDOME_ENABLED = config.skydomeEnabled !== undefined ? config.skydomeEnabled : false;
-    this.SKYDOME_RADIUS = config.skydomeRadius || 100;
-    this.SKYDOME_SEGMENTS = config.skydomeSegments || 32;
-    this.skydomeTexture = null;
-    this.skydome_rep_h = 4;
-    this.skydome_vert_ajust = '12.5'
+    if (config.skydome){
+      this.SKYDOME_ENABLED = config.skydome.enabled !== undefined ? config.skydome.enabled : SKYDOME_ENABLED_DEFAULT;
+      this.SKYDOME_RADIUS = config.skydome.radius || SKYDOME_RADIUS_DEFAULT;
+      this.SKYDOME_SEGMENTS = config.skydome.segments || SKYDOME_SEGMENTS_DEFAULT;
+      this.skydomeTexture = null;
+      this.skydome_rep_h = this.transformNumber( (config.skydome.rep_h || SKYDOME_HORIZONTAL_REP_DEFAULT));
+      this.skydome_vert_ajust = this.transformNumber( (config.skydome.rep_v || SKYDOME_VERTICAL_REP_DEFAULT) );
+    }else{
+      this.SKYDOME_ENABLED = SKYDOME_ENABLED_DEFAULT;
+      this.SKYDOME_RADIUS = SKYDOME_RADIUS_DEFAULT;
+      this.SKYDOME_SEGMENTS = SKYDOME_SEGMENTS_DEFAULT;
+      this.skydomeTexture = null;
+      this.skydome_rep_h = this.transformNumber(SKYDOME_HORIZONTAL_REP_DEFAULT);
+      this.skydome_vert_ajust = this.transformNumber(SKYDOME_VERTICAL_REP_DEFAULT);
+    }
+        // Niebla
+    if (config.fog){
+      this.FOG_ENABLED = config.fog.enabled !== undefined ? config.fog.enabled : FOG_ENABLED_DEFAULT;
+      this.FOG_START = config.fog.start || FOG_START_DEFAULT;  // Distancia donde empieza la niebla
+      this.FOG_END = config.fog.end || FOG_END_DEFAULT;      // Distancia donde es niebla completa
+      this.FOG_COLOR = config.fog.color || this.color1; // Color de la niebla
+    }else{
+      this.FOG_ENABLED =  FOG_ENABLED_DEFAULT;
+      this.FOG_START =  FOG_START_DEFAULT;  // Distancia donde empieza la niebla
+      this.FOG_END =  FOG_END_DEFAULT;      // Distancia donde es niebla completa
+      this.FOG_COLOR = this.color1; // Color de la niebla
+    }
 
 
     // WebGL Context
     let contextOptions = this.canvas.getContext('webgl2', {
-      alpha: false,
+      alpha: CANVAS_ANTIALIAS_DEFAULT,
       depth: true,
       stencil: false,
-      antialias: true,
+      antialias: false,
       premultipliedAlpha: false,
       preserveDrawingBuffer: false,
-      powerPreference: 'high-performance',
+      powerPreference: CANVAS_POWER_PREFERENCE_DEFAULT, //''default',low-power,'high-performance',
       failIfMajorPerformanceCaveat: false // <-- para que en chrome pueda usar la gpu
     });
     
@@ -88,6 +146,8 @@ class Glitter7engine {
     this.initShaders();
     this.initBuffers();
     this.initUniforms();
+    this.setTileMap(config.map.array);
+
   }
   
   initTextures() {
@@ -198,7 +258,7 @@ getSkydomeFS() {
     v = v * ${this.skydome_vert_ajust} + 0.15; // mueve y estira — AJUSTABLE
 
     //v = v * 0.6 - 0.4; // Ocupa el 60% inferior
-    vec2 texCoord = vec2(u*${this.skydome_rep_h}.0, v);
+    vec2 texCoord = vec2(u*${this.skydome_rep_h}, v);
     outColor = texture(u_skydomeTexture, texCoord);
   }`;
 }
@@ -215,58 +275,72 @@ getSkydomeFS() {
   }
   
   getGroundFS() {
-    return `#version 300 es
-    precision highp float;
-    precision highp usampler2D;
-    in vec2 v_texCoord;
-    out vec4 outColor;
-    uniform sampler2D u_spritesheet;
-    uniform usampler2D u_tileMapTexture;
-    uniform vec4 u_camera;
-    uniform float u_spriteCount;
+  return `#version 300 es
+  precision highp float;
+  precision highp usampler2D;
+  in vec2 v_texCoord;
+  out vec4 outColor;
+  uniform sampler2D u_spritesheet;
+  uniform usampler2D u_tileMapTexture;
+  uniform vec4 u_camera;
+  uniform float u_spriteCount;
+  uniform bool u_fogEnabled;
+  uniform float u_fogStart;
+  uniform float u_fogEnd;
+  uniform vec3 u_fogColor;
+  
+  void main() {
+    float angle = u_camera.w;
+    float cosA = cos(angle);
+    float sinA = sin(angle);
     
-    void main() {
-      float angle = u_camera.w;
-      float cosA = cos(angle);
-      float sinA = sin(angle);
-      
-      float horizon = 0.3;
-      float screenY = 1.0 - v_texCoord.y;
-      float perspective = u_camera.z / (screenY - horizon);
-      
-      if (perspective < 0.0 || perspective > ${this.MAX_RENDER_DISTANCE}.0) {
-        discard;
-      }
-      
-      float dx = (v_texCoord.x - 0.5);
-      float worldX = u_camera.x + (cosA * dx - sinA * 1.0) * perspective;
-      float worldY = u_camera.y + (sinA * dx + cosA * 1.0) * perspective;
-      
-      int tileX = int(floor(worldX));
-      int tileY = int(floor(worldY));
-      
-      if(tileX < 0 || tileY < 0 || tileX >= ${this.MAP_WIDTH} || tileY >= ${this.MAP_HEIGHT}) {
-        discard;
-      }
-      
-      vec2 tileTexCoord = vec2(float(tileX) + 0.5, float(tileY) + 0.5) / vec2(${this.MAP_WIDTH}.0, ${this.MAP_HEIGHT}.0);
-      uint tileIndex = texture(u_tileMapTexture, tileTexCoord).r;
-      
-      if(tileIndex == 0u) {
-        outColor = vec4(0.3, 0.3, 0.3, 1.0);
-        return;
-      }
-      
-      float tx = fract(worldX);
-      float ty = fract(worldY);
-      
-      float spriteWidth = 1.0 / u_spriteCount;
-      vec2 texCoord = vec2(tx * spriteWidth, ty);
-      texCoord.x += float(tileIndex - 1u) * spriteWidth;
-      
-      outColor = texture(u_spritesheet, texCoord);
-    }`;
-  }
+    float horizon = 0.3;
+    float screenY = 1.0 - v_texCoord.y;
+    float perspective = u_camera.z / (screenY - horizon);
+    
+    if (perspective < 0.0 || perspective > ${this.MAX_RENDER_DISTANCE}.0) {
+      discard;
+    }
+    
+    float dx = (v_texCoord.x - 0.5);
+    float worldX = u_camera.x + (cosA * dx - sinA * 1.0) * perspective;
+    float worldY = u_camera.y + (sinA * dx + cosA * 1.0) * perspective;
+    
+    int tileX = int(floor(worldX));
+    int tileY = int(floor(worldY));
+    
+    if(tileX < 0 || tileY < 0 || tileX >= ${this.MAP_WIDTH} || tileY >= ${this.MAP_HEIGHT}) {
+      discard;
+    }
+    
+    vec2 tileTexCoord = vec2(float(tileX) + 0.5, float(tileY) + 0.5) / vec2(${this.MAP_WIDTH}.0, ${this.MAP_HEIGHT}.0);
+    uint tileIndex = texture(u_tileMapTexture, tileTexCoord).r;
+    
+    if(tileIndex == 0u) {
+      outColor = vec4(0.3, 0.3, 0.3, 1.0);
+      return;
+    }
+    
+    float tx = fract(worldX);
+    float ty = fract(worldY);
+    
+    float spriteWidth = 1.0 / u_spriteCount;
+    vec2 texCoord = vec2(tx * spriteWidth, ty);
+    texCoord.x += float(tileIndex - 1u) * spriteWidth;
+    
+    vec4 baseColor = texture(u_spritesheet, texCoord);
+    
+    // Aplicar niebla
+    if (u_fogEnabled) {
+      float distance = perspective;
+      float fogFactor = clamp((u_fogEnd - distance) / (u_fogEnd - u_fogStart), 0.0, 1.0);
+      outColor = vec4(mix(u_fogColor, baseColor.rgb, fogFactor), baseColor.a);
+    } else {
+      outColor = baseColor;
+    }
+  }`;
+}
+
   
   getBillboardVS() {
     return `#version 300 es
@@ -282,124 +356,147 @@ getSkydomeFS() {
   }
   
   getBillboardFS() {
-    return `#version 300 es
-    precision highp float;
-    in vec2 v_texCoord;
-    out vec4 outColor;
-    uniform sampler2D u_spritesheet;
-    uniform int u_spriteIndex;
-    uniform float u_spriteCount;
-    
-    void main() {
-      vec2 uv = v_texCoord;
-      uv.x /= u_spriteCount;
-      uv.x += float(u_spriteIndex - 1) / u_spriteCount;
-      vec4 color = texture(u_spritesheet, uv);
-      if (color.a < 0.1) discard;
-      outColor = color;
-    }`;
-  }
+  return `#version 300 es
+  precision highp float;
+  in vec2 v_texCoord;
+  out vec4 outColor;
+  uniform sampler2D u_spritesheet;
+  uniform int u_spriteIndex;
+  uniform float u_spriteCount;
+  uniform bool u_fogEnabled;
+  uniform float u_fogStart;
+  uniform float u_fogEnd;
+  uniform vec3 u_fogColor;
+  uniform float u_distance;
   
-  getBlockVS() {
-    return `#version 300 es
-    in vec3 a_position;
-    in vec2 a_texCoord;
-    in vec3 a_normal;
-    in vec4 a_instanceData;
+  void main() {
+    vec2 uv = v_texCoord;
+    uv.x /= u_spriteCount;
+    uv.x += float(u_spriteIndex - 1) / u_spriteCount;
+    vec4 color = texture(u_spritesheet, uv);
+    if (color.a < 0.1) discard;
     
-    uniform vec4 u_camera;
-    uniform vec2 u_resolution;
+    // Aplicar niebla
+    if (u_fogEnabled) {
+      float fogFactor = clamp((u_fogEnd - u_distance) / (u_fogEnd - u_fogStart), 0.0, 1.0);
+      outColor = vec4(mix(u_fogColor, color.rgb, fogFactor), color.a);
+    } else {
+      outColor = color;
+    }
+  }`;
+}
+
+getBlockVS() {
+  return `#version 300 es
+  in vec3 a_position;
+  in vec2 a_texCoord;
+  in vec3 a_normal;
+  in vec4 a_instanceData;
+  
+  uniform vec4 u_camera;
+  uniform vec2 u_resolution;
+  
+  out vec2 v_texCoord;
+  out float v_depth;
+  out float v_height;
+  out vec3 v_normal;
+  
+  void main() {
+    vec3 instancePos = a_instanceData.xyz;
+    float height = a_instanceData.w;
     
-    out vec2 v_texCoord;
-    out float v_depth;
-    out float v_height;
-    out vec3 v_normal;
+    vec3 scaledPos = a_position;
+    scaledPos.y *= height;
     
-    void main() {
-      vec3 instancePos = a_instanceData.xyz;
-      float height = a_instanceData.w;
-      
-      vec3 scaledPos = a_position;
-      scaledPos.y *= height;
-      
-      vec3 worldPos = scaledPos + instancePos;
-      
-      float dx = worldPos.x - u_camera.x;
-      float dy = worldPos.z - u_camera.y;
-      
-      float angle = u_camera.w;
-      float cosA = cos(-angle);
-      float sinA = sin(-angle);
-      
-      float rotX = dx * cosA - dy * sinA;
-      float rotY = dx * sinA + dy * cosA;
-      
-      if (rotY < 0.5) {
-        gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
-        v_texCoord = a_texCoord;
-        v_depth = -1.0;
-        v_height = height;
-        v_normal = a_normal;
-        return;
-      }
-      
-      float horizon = 0.3;
-      float screenX = 0.5 + rotX / rotY;
-      float screenY = 1.0 - (horizon + (u_camera.z - worldPos.y) / rotY);
-      
-      gl_Position = vec4(
-        screenX * 2.0 - 1.0,
-        screenY * 2.0 - 1.0,
-        rotY / ${this.MAX_RENDER_DISTANCE}.0,
-        1.0
-      );
-      
-      float isVertical = 1.0 - abs(a_normal.y);
-      v_texCoord = vec2(a_texCoord.x, a_texCoord.y * mix(1.0, height, isVertical));
-      v_depth = rotY;
+    vec3 worldPos = scaledPos + instancePos;
+    
+    float dx = worldPos.x - u_camera.x;
+    float dy = worldPos.z - u_camera.y;
+    
+    float angle = u_camera.w;
+    float cosA = cos(-angle);
+    float sinA = sin(-angle);
+    
+    float rotX = dx * cosA - dy * sinA;
+    float rotY = dx * sinA + dy * cosA;
+    
+    if (rotY < 0.5) {
+      gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
+      v_texCoord = a_texCoord;
+      v_depth = -1.0;
       v_height = height;
       v_normal = a_normal;
-    }`;
-  }
+      return;
+    }
+    
+    float horizon = 0.3;
+    float screenX = 0.5 + rotX / rotY;
+    float screenY = 1.0 - (horizon + (u_camera.z - worldPos.y) / rotY);
+    
+    gl_Position = vec4(
+      screenX * 2.0 - 1.0,
+      screenY * 2.0 - 1.0,
+      rotY / ${this.MAX_RENDER_DISTANCE}.0,
+      1.0
+    );
+    
+    float isVertical = 1.0 - abs(a_normal.y);
+    v_texCoord = vec2(a_texCoord.x, a_texCoord.y * mix(1.0, height, isVertical));
+    v_depth = rotY;
+    v_height = height;
+    v_normal = a_normal;
+  }`;
+}
   
-  getBlockFS() {
-    return `#version 300 es
-    precision highp float;
-    in vec2 v_texCoord;
-    in float v_depth;
-    in float v_height;
-    in vec3 v_normal;
-    out vec4 outColor;
+ getBlockFS() {
+  return `#version 300 es
+  precision highp float;
+  in vec2 v_texCoord;
+  in float v_depth;
+  in float v_height;
+  in vec3 v_normal;
+  out vec4 outColor;
+  
+  uniform sampler2D u_spritesheet;
+  uniform int u_spriteIndex;
+  uniform float u_spriteCount;
+  uniform vec3 u_lightDir;
+  uniform bool u_illumination;
+  uniform float u_ambient;
+  uniform float u_diffuse;
+  uniform bool u_fogEnabled;
+  uniform float u_fogStart;
+  uniform float u_fogEnd;
+  uniform vec3 u_fogColor;
+  
+  void main() {
+    if (v_depth < 0.0) discard;
     
-    uniform sampler2D u_spritesheet;
-    uniform int u_spriteIndex;
-    uniform float u_spriteCount;
-    uniform vec3 u_lightDir;
-    uniform bool u_illumination;
-    uniform float u_ambient;
-    uniform float u_diffuse;
+    float spriteWidth = 1.0 / u_spriteCount;
+    vec2 uv = vec2(v_texCoord.x * spriteWidth, fract(v_texCoord.y));
+    uv.x += float(u_spriteIndex - 1) * spriteWidth;
     
-    void main() {
-      if (v_depth < 0.0) discard;
-      
-      float spriteWidth = 1.0 / u_spriteCount;
-      vec2 uv = vec2(v_texCoord.x * spriteWidth, fract(v_texCoord.y));
-      uv.x += float(u_spriteIndex - 1) * spriteWidth;
-      
-      vec4 color = texture(u_spritesheet, uv);
-      if (color.a < 0.1) discard;
-      
-      if (!u_illumination) {
-        outColor = color;
-        return;
-      }
-      
+    vec4 color = texture(u_spritesheet, uv);
+    if (color.a < 0.1) discard;
+    
+    vec3 finalColor = color.rgb;
+    
+    // Aplicar iluminación
+    if (u_illumination) {
       float diffuseLight = max(dot(v_normal, u_lightDir), 0.0);
       float lighting = u_ambient + diffuseLight * u_diffuse;
-      
-      outColor = vec4(color.rgb * lighting, color.a);
-    }`;
-  }
+      finalColor *= lighting;
+    }
+    
+    // Aplicar niebla
+    if (u_fogEnabled) {
+      float fogFactor = clamp((u_fogEnd - v_depth) / (u_fogEnd - u_fogStart), 0.0, 1.0);
+      finalColor = mix(u_fogColor, finalColor, fogFactor);
+    }
+    
+    outColor = vec4(finalColor, color.a);
+  }`;
+}
   initBuffers() {
     // Buffer para el quad del suelo y cielo
     this.positionBuffer = this.gl.createBuffer();
@@ -525,42 +622,54 @@ createSkydomeGeometry() {
 }
   
   initUniforms() {
-    this.uniformLocations = {
-
-      skydome: {
+      this.uniformLocations = {
+    skydome: {
       viewMatrix: this.gl.getUniformLocation(this.skydomeProgram, 'u_viewMatrix'),
       projMatrix: this.gl.getUniformLocation(this.skydomeProgram, 'u_projMatrix'),
       skydomeTexture: this.gl.getUniformLocation(this.skydomeProgram, 'u_skydomeTexture')
     },
-      ground: {
-        spriteCount: this.gl.getUniformLocation(this.program, 'u_spriteCount'),
-        camera: this.gl.getUniformLocation(this.program, 'u_camera'),
-        tileMapTexture: this.gl.getUniformLocation(this.program, 'u_tileMapTexture'),
-        spritesheet: this.gl.getUniformLocation(this.program, 'u_spritesheet')
-      },
-      billboard: {
-        screenPos: this.gl.getUniformLocation(this.billboardProgram, 'u_screenPos'),
-        size: this.gl.getUniformLocation(this.billboardProgram, 'u_size'),
-        spriteIndex: this.gl.getUniformLocation(this.billboardProgram, 'u_spriteIndex'),
-        spriteCount: this.gl.getUniformLocation(this.billboardProgram, 'u_spriteCount'),
-        spritesheet: this.gl.getUniformLocation(this.billboardProgram, 'u_spritesheet')
-      },
-      block: {
-        camera: this.gl.getUniformLocation(this.blockProgram, 'u_camera'),
-        resolution: this.gl.getUniformLocation(this.blockProgram, 'u_resolution'),
-        spriteIndex: this.gl.getUniformLocation(this.blockProgram, 'u_spriteIndex'),
-        spriteCount: this.gl.getUniformLocation(this.blockProgram, 'u_spriteCount'),
-        spritesheet: this.gl.getUniformLocation(this.blockProgram, 'u_spritesheet'),
-        lightDir: this.gl.getUniformLocation(this.blockProgram, 'u_lightDir'),
-        illumination: this.gl.getUniformLocation(this.blockProgram, 'u_illumination'),
-        ambient: this.gl.getUniformLocation(this.blockProgram, 'u_ambient'),
-        diffuse: this.gl.getUniformLocation(this.blockProgram, 'u_diffuse')
-      },
-      sky: {
-        color1: this.gl.getUniformLocation(this.skyProgram, 'u_color1'),
-        color2: this.gl.getUniformLocation(this.skyProgram, 'u_color2')
-      }
-    };
+    ground: {
+      spriteCount: this.gl.getUniformLocation(this.program, 'u_spriteCount'),
+      camera: this.gl.getUniformLocation(this.program, 'u_camera'),
+      tileMapTexture: this.gl.getUniformLocation(this.program, 'u_tileMapTexture'),
+      spritesheet: this.gl.getUniformLocation(this.program, 'u_spritesheet'),
+      fogEnabled: this.gl.getUniformLocation(this.program, 'u_fogEnabled'),
+      fogStart: this.gl.getUniformLocation(this.program, 'u_fogStart'),
+      fogEnd: this.gl.getUniformLocation(this.program, 'u_fogEnd'),
+      fogColor: this.gl.getUniformLocation(this.program, 'u_fogColor')
+    },
+    billboard: {
+      screenPos: this.gl.getUniformLocation(this.billboardProgram, 'u_screenPos'),
+      size: this.gl.getUniformLocation(this.billboardProgram, 'u_size'),
+      spriteIndex: this.gl.getUniformLocation(this.billboardProgram, 'u_spriteIndex'),
+      spriteCount: this.gl.getUniformLocation(this.billboardProgram, 'u_spriteCount'),
+      spritesheet: this.gl.getUniformLocation(this.billboardProgram, 'u_spritesheet'),
+      fogEnabled: this.gl.getUniformLocation(this.billboardProgram, 'u_fogEnabled'),
+      fogStart: this.gl.getUniformLocation(this.billboardProgram, 'u_fogStart'),
+      fogEnd: this.gl.getUniformLocation(this.billboardProgram, 'u_fogEnd'),
+      fogColor: this.gl.getUniformLocation(this.billboardProgram, 'u_fogColor'),
+      distance: this.gl.getUniformLocation(this.billboardProgram, 'u_distance')
+    },
+    block: {
+      camera: this.gl.getUniformLocation(this.blockProgram, 'u_camera'),
+      resolution: this.gl.getUniformLocation(this.blockProgram, 'u_resolution'),
+      spriteIndex: this.gl.getUniformLocation(this.blockProgram, 'u_spriteIndex'),
+      spriteCount: this.gl.getUniformLocation(this.blockProgram, 'u_spriteCount'),
+      spritesheet: this.gl.getUniformLocation(this.blockProgram, 'u_spritesheet'),
+      lightDir: this.gl.getUniformLocation(this.blockProgram, 'u_lightDir'),
+      illumination: this.gl.getUniformLocation(this.blockProgram, 'u_illumination'),
+      ambient: this.gl.getUniformLocation(this.blockProgram, 'u_ambient'),
+      diffuse: this.gl.getUniformLocation(this.blockProgram, 'u_diffuse'),
+      fogEnabled: this.gl.getUniformLocation(this.blockProgram, 'u_fogEnabled'),
+      fogStart: this.gl.getUniformLocation(this.blockProgram, 'u_fogStart'),
+      fogEnd: this.gl.getUniformLocation(this.blockProgram, 'u_fogEnd'),
+      fogColor: this.gl.getUniformLocation(this.blockProgram, 'u_fogColor')
+    },
+    sky: {
+      color1: this.gl.getUniformLocation(this.skyProgram, 'u_color1'),
+      color2: this.gl.getUniformLocation(this.skyProgram, 'u_color2')
+    }
+  };
     
     this.attribLocations = {
       skydome: {
@@ -896,6 +1005,14 @@ createProjectionMatrix() {
     this.gl.activeTexture(this.gl.TEXTURE1);
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.tileMapTexture);
     this.gl.uniform1i(this.uniformLocations.ground.tileMapTexture, 1);
+
+      // niebla
+    this.gl.uniform1i(this.uniformLocations.ground.fogEnabled, this.FOG_ENABLED);
+    this.gl.uniform1f(this.uniformLocations.ground.fogStart, this.FOG_START);
+    this.gl.uniform1f(this.uniformLocations.ground.fogEnd, this.FOG_END);
+    this.gl.uniform3f(this.uniformLocations.ground.fogColor, 
+    this.FOG_COLOR[0], this.FOG_COLOR[1], this.FOG_COLOR[2]);
+
     
     this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
   }
@@ -912,7 +1029,22 @@ createProjectionMatrix() {
     this.gl.uniform1f(this.uniformLocations.billboard.size, billboard.proj.size);
     this.gl.uniform1i(this.uniformLocations.billboard.spriteIndex, billboard.tile);
     this.gl.uniform1f(this.uniformLocations.billboard.spriteCount, this.tile_items_size);
+    //niebla
+      // Calcular distancia del billboard
+    const dx = billboard.x - this.lastCamera.x;
+    const dy = billboard.y - this.lastCamera.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
     
+    // Añadir uniforms de niebla
+    this.gl.uniform1i(this.uniformLocations.billboard.fogEnabled, this.FOG_ENABLED);
+    this.gl.uniform1f(this.uniformLocations.billboard.fogStart, this.FOG_START);
+    this.gl.uniform1f(this.uniformLocations.billboard.fogEnd, this.FOG_END);
+    this.gl.uniform3f(this.uniformLocations.billboard.fogColor, 
+      this.FOG_COLOR[0], this.FOG_COLOR[1], this.FOG_COLOR[2]);
+    this.gl.uniform1f(this.uniformLocations.billboard.distance, distance);
+
+
+
     this.gl.activeTexture(this.gl.TEXTURE0);
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
     this.gl.uniform1i(this.uniformLocations.billboard.spritesheet, 0);
@@ -976,6 +1108,14 @@ createProjectionMatrix() {
     this.gl.activeTexture(this.gl.TEXTURE0);
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
     this.gl.uniform1i(this.uniformLocations.block.spritesheet, 0);
+
+      // Añadir uniforms de niebla antes del drawArraysInstanced:
+  this.gl.uniform1i(this.uniformLocations.block.fogEnabled, this.FOG_ENABLED);
+  this.gl.uniform1f(this.uniformLocations.block.fogStart, this.FOG_START);
+  this.gl.uniform1f(this.uniformLocations.block.fogEnd, this.FOG_END);
+  this.gl.uniform3f(this.uniformLocations.block.fogColor, 
+    this.FOG_COLOR[0], this.FOG_COLOR[1], this.FOG_COLOR[2]);
+
     
     this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, 36, instances.length);
     
@@ -983,7 +1123,9 @@ createProjectionMatrix() {
   }
   
   // Método principal de render
-  render(camera, independentObjects = [], renderSky = true) {
+  render(independentObjects = [], renderSky = true) {
+    let camera = this.camera;
+    this.lastCamera = camera; //
     this.updateTrigCache(camera);
     
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -1097,6 +1239,38 @@ createProjectionMatrix() {
   setSkydomeRadius(radius) {
     this.SKYDOME_RADIUS = radius;
     this.createSkydomeGeometry();
+  }
+
+    toggleFog() {
+    this.FOG_ENABLED = !this.FOG_ENABLED;
+    return this.FOG_ENABLED;
+  }
+  
+  setFogEnabled(value) {
+    this.FOG_ENABLED = value;
+  }
+  
+  setFogStart(value) {
+    this.FOG_START = value;
+  }
+  
+  setFogEnd(value) {
+    this.FOG_END = value;
+  }
+  
+  setFogColor(r, g, b) {
+    this.FOG_COLOR = [r, g, b];
+  }
+  
+  setFogRange(start, end) {
+    this.FOG_START = start;
+    this.FOG_END = end;
+  }
+
+  //funciones auxiliares
+
+  transformNumber(n){
+    return Number(n).toFixed(1);
   }
 
 
