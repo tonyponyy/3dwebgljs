@@ -16,7 +16,8 @@
     const SKYDOME_SEGMENTS_DEFAULT =32;
     const SKYDOME_ENABLED_DEFAULT = false;
     const MAX_RENDER_DISTANCE_DEFAULT = 100;
-    const FRUSTUM_MARGIN_DEFAULT = 0.4
+    const FRUSTUM_MARGIN_DEFAULT = 0.4;
+    const DEFAULT_BILLBOARD_GROUND_DEFAULT = 0;
 
 
 class Glitter7engine {
@@ -39,6 +40,9 @@ class Glitter7engine {
     this.billboard_tiles_set = new Set(this.billboard_tiles);
     this.block_tiles_set = new Set(this.block_tiles);
     this.tile_heights = config.tileHeights || {};
+    this.DEFAULT_BILLBOARD_GROUND = config.defaultBillboardGround || DEFAULT_BILLBOARD_GROUND_DEFAULT;
+    this.billboard_ground_tiles = config.billboardGroundTiles || {};
+
     
     // Iluminación
     if (config.light !=null){
@@ -315,6 +319,10 @@ getSkydomeFS() {
     
     vec2 tileTexCoord = vec2(float(tileX) + 0.5, float(tileY) + 0.5) / vec2(${this.MAP_WIDTH}.0, ${this.MAP_HEIGHT}.0);
     uint tileIndex = texture(u_tileMapTexture, tileTexCoord).r;
+
+    if(tileIndex == 0u) {
+      discard;  // Crea un agujero transparente
+    }
     
     if(tileIndex == 0u) {
       outColor = vec4(0.3, 0.3, 0.3, 1.0);
@@ -736,18 +744,27 @@ createSkydomeGeometry() {
     this.updateTileMapTexture();
   }
   
-  updateTileMapTexture() {
-    if (!this.tileMap) return;
+updateTileMapTexture() {
+  if (!this.tileMap) return;
+  
+  const data = new Uint8Array(this.MAP_WIDTH * this.MAP_HEIGHT);
+  for (let i = 0; i < this.tileMap.length; i++) {
+    const tile = this.tileMap[i];
     
-    const data = new Uint8Array(this.MAP_WIDTH * this.MAP_HEIGHT);
-    for (let i = 0; i < this.tileMap.length; i++) {
-      data[i] = this.tileMap[i];
+    // Si es un billboard, poner el tile de suelo correspondiente
+    if (this.isBillboard(tile)) {
+      data[i] = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
+    } else {
+      data[i] = tile;
     }
-    this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
-    this.gl.bindTexture(this.gl.TEXTURE_2D, this.tileMapTexture);
-    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.R8UI, this.MAP_WIDTH, this.MAP_HEIGHT, 0, this.gl.RED_INTEGER, this.gl.UNSIGNED_BYTE, data);
-    this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
   }
+  
+  this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
+  this.gl.bindTexture(this.gl.TEXTURE_2D, this.tileMapTexture);
+  this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.R8UI, this.MAP_WIDTH, this.MAP_HEIGHT, 0, this.gl.RED_INTEGER, this.gl.UNSIGNED_BYTE, data);
+  this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
+}
+
   
   // Frustum culling
   updateTrigCache(camera) {

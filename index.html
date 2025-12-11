@@ -15,918 +15,325 @@
       padding: 10px;
       border-radius: 5px;
       font-size: 14px;
+      z-index: 100;
     }
     #fps {
       color: #0f0;
       font-weight: bold;
     }
+    
+    /* Controles móviles */
+    .mobile-controls {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 250px;
+      pointer-events: none;
+      z-index: 50;
+    }
+    
+    /* Pad direccional (D-Pad) */
+    #dpad-area {
+      position: absolute;
+      bottom: 30px;
+      left: 30px;
+      width: 180px;
+      height: 180px;
+      pointer-events: all;
+    }
+    
+    .dpad-btn {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      background: rgba(255, 255, 255, 0.2);
+      border: 3px solid rgba(255, 255, 255, 0.5);
+      color: white;
+      font-size: 28px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+      user-select: none;
+      cursor: pointer;
+    }
+    
+    .dpad-btn:active {
+      background: rgba(255, 255, 255, 0.4);
+      transform: scale(0.95);
+    }
+    
+    #btn-up {
+      top: 0;
+      left: 60px;
+      border-radius: 10px 10px 5px 5px;
+    }
+    
+    #btn-down {
+      bottom: 0;
+      left: 60px;
+      border-radius: 5px 5px 10px 10px;
+    }
+    
+    #btn-left {
+      top: 60px;
+      left: 0;
+      border-radius: 10px 5px 5px 10px;
+    }
+    
+    #btn-right {
+      top: 60px;
+      right: 0;
+      border-radius: 5px 10px 10px 5px;
+    }
+    
+    /* Centro del D-Pad (decorativo) */
+    #dpad-center {
+      position: absolute;
+      top: 60px;
+      left: 60px;
+      width: 60px;
+      height: 60px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 4px solid rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    
+    /* Botón de acción */
+    #action-button {
+      position: absolute;
+      bottom: 60px;
+      right: 50px;
+      pointer-events: all;
+    }
+    
+    .action-btn {
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 4px solid rgba(255, 255, 255, 0.2);
+      color: white;
+      font-size: 32px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+      user-select: none;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+    
+    .action-btn:active {
+      background: rgba(138, 134, 150, 0.5);
+      transform: scale(0.92);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    }
+
   </style>
 </head>
 <body>
 <canvas id="glCanvas" width="960" height="540"></canvas>
-<div id="controls">
-  <div><span id="fps">FPS: 0</span></div>
-  <div><span id="vx">0</span></div>
-    <div><span id="vy">0</span></div>
-    <div><span id="v">0</span></div>
 
-  <div>Controles: Flechas = mover | W/S = altura</div>
-  <div>L = Toggle iluminación | <span id="lightStatus">ON</span></div>
+<!-- Controles móviles -->
+<div class="mobile-controls">
+  <!-- D-Pad direccional -->
+  <div id="dpad-area">
+    <div id="dpad-center"></div>
+    <div class="dpad-btn" id="btn-up">▲</div>
+    <div class="dpad-btn" id="btn-down">▼</div>
+    <div class="dpad-btn" id="btn-left">◄</div>
+    <div class="dpad-btn" id="btn-right">►</div>
+  </div>
+  
+  <!-- Botón de acción -->
+  <div id="action-button">
+    <div class="action-btn" id="btn-action"></div>
+  </div>
 </div>
+
 <script>
-// ======= Configuración =======
-
-let MAX_RENDER_DISTANCE = 50;
-let FRUSTUM_MARGIN = 0.4;
-
-let billboard_tiles = [4,3,9,10,11];
-let block_tiles = [5,6,7,8];
-const billboard_tiles_set = new Set(billboard_tiles);
-const block_tiles_set = new Set(block_tiles);
-
-const tile_heights = {
-  5: 4,
-  7: 8,
-  8:10,
-  6:10
-
-};
-const TILE_SIZE = 32;
-const MAP_WIDTH = 100;
-const MAP_HEIGHT = 100;
-</script>
-<script src="image64.js"></script>
-<script src="test48.js"></script>
-<script src="collision.js"></script>
-<script src="player.js"></script>
-<script src="camera.js"></script>
-<script>
-// ======= CONFIGURACIÓN ILUMINACIÓN =======
-let ILLUMINATION = true;
-let AMBIENT_LIGHT = 0.5;
-let LIGHT_DIFFUSE = 0.7;
-let lightDir = [0.3, 0.7, 0.5];
-
-let camera = {
-  x: 24.0,
-  y: 24.0,
-  z: 1.0,
-  angle: 3.0
-};
-
-let playerObject = { tile: 11, x: 10.5, y: 0.5, z: 0.0 };
-let independentObjects = [
-  playerObject,  // El primer objeto es el jugador
-  { tile: 7, x: 15.0, y: 15.0, z: 0.0 },
-  { tile: 4, x: 20.5, y: 20.5, z: 0.0 },
-  { tile: 8, x: 25.0, y: 12.0, z: 0.0 }
-];
-let tileMap = TileMaps["test48"].layers[0].data
-
-
-const player = initPlayer(playerObject, tileMap, independentObjects);
-
-
-
-const canvas = document.getElementById('glCanvas');
-const gl = canvas.getContext('webgl2', {
-  alpha: false,
-  depth: true,
-  stencil: false,
-  antialias: true,
-  premultipliedAlpha: false,
-  preserveDrawingBuffer: false,
-  powerPreference: 'high-performance'
-});
-
-// ======= CONFIGURACIÓN DE CALIDAD =======
-const RENDER_SCALE = 1.0;
-const CANVAS_WIDTH = 960;
-const CANVAS_HEIGHT = 540;
-
-canvas.width = CANVAS_WIDTH * RENDER_SCALE;
-canvas.height = CANVAS_HEIGHT * RENDER_SCALE;
-canvas.style.width = CANVAS_WIDTH + 'px';
-canvas.style.height = CANVAS_HEIGHT + 'px';
-
-
-
-let tile_items_size = 6;
-
-let cachedCosA = 0;
-let cachedSinA = 0;
-let cameraAngleCache = 0;
-
-let image = new Image();
-const spriteTexture = gl.createTexture();
-
-const tileMapTexture = gl.createTexture();
-gl.bindTexture(gl.TEXTURE_2D, tileMapTexture);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-
-function updateTileMapTexture() {
-  const data = new Uint8Array(MAP_WIDTH * MAP_HEIGHT);
-  for (let i = 0; i < tileMap.length; i++) {
-    data[i] = tileMap[i];
-  }
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);  // ← AÑADE ESTA LÍNEA
-  gl.bindTexture(gl.TEXTURE_2D, tileMapTexture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8UI, MAP_WIDTH, MAP_HEIGHT, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, data);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);   // ← Y ESTA (para restaurar)
-}
-
-image.onload = function() {
-  tile_items_size = Math.floor(image.width / TILE_SIZE);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-  gl.bindTexture(gl.TEXTURE_2D, spriteTexture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-  
-  updateTileMapTexture();
-};
-
-image.src = image_64;
-
-let color1 = [0.5, 0.7, 1.0];
-let color2 = [0.1, 0.3, 0.8];
-
-//let tileMap = TileMaps["test48"].layers[0].data
-
-// ======= SHADER CIELO =======
-const skyVS = `#version 300 es
-in vec2 a_position;
-out vec2 v_texCoord;
-void main() {
-  v_texCoord = a_position * 0.5 + 0.5;
-  gl_Position = vec4(a_position, 0.0, 1.0);
-}
-`;
-
-const skyFS = `#version 300 es
-precision highp float;
-in vec2 v_texCoord;
-out vec4 outColor;
-uniform vec3 u_color1;
-uniform vec3 u_color2;
-void main() {
-  float t = v_texCoord.y;
-  outColor = vec4(mix(u_color1, u_color2, t), 1.0);
-}
-`;
-
-// ======= SHADER SUELO MODE7 (USANDO TEXTURA EN VEZ DE ARRAY) =======
-const vsSource = `#version 300 es
-in vec2 a_position;
-out vec2 v_texCoord;
-void main() {
-  v_texCoord = a_position * 0.5 + 0.5;
-  gl_Position = vec4(a_position, 0.0, 1.0);
-}
-`;
-
-const fsSource = `#version 300 es
-precision highp float;
-precision highp usampler2D;
-in vec2 v_texCoord;
-out vec4 outColor;
-uniform sampler2D u_spritesheet;
-uniform usampler2D u_tileMapTexture;
-uniform vec4 u_camera;
-uniform float u_spriteCount;
-
-void main() {
-  float angle = u_camera.w;
-  float cosA = cos(angle);
-  float sinA = sin(angle);
-  
-  float horizon = 0.3;
-  float screenY = 1.0 - v_texCoord.y;
-  float perspective = u_camera.z / (screenY - horizon);
-
-  if (perspective < 0.0 || perspective > ${MAX_RENDER_DISTANCE}.0) {
-    discard;
-  }
-
-  float dx = (v_texCoord.x - 0.5);
-  float worldX = u_camera.x + (cosA * dx - sinA * 1.0) * perspective;
-  float worldY = u_camera.y + (sinA * dx + cosA * 1.0) * perspective;
-
-  
-  int tileX = int(floor(worldX));
-  int tileY = int(floor(worldY));
-
-  if(tileX < 0 || tileY < 0 || tileX >= ${MAP_WIDTH} || tileY >= ${MAP_HEIGHT}) {
-    discard;
-  }
-
-  vec2 tileTexCoord = vec2(float(tileX) + 0.5, float(tileY) + 0.5) / vec2(${MAP_WIDTH}.0, ${MAP_HEIGHT}.0);
-  uint tileIndex = texture(u_tileMapTexture, tileTexCoord).r;
-  
-  if(tileIndex == 0u) {
-    outColor = vec4(0.3, 0.3, 0.3, 1.0);
-    return;
-  }
-
-  float tx = fract(worldX);
-  float ty = fract(worldY);
-
-  float spriteWidth = 1.0 / u_spriteCount;
-  vec2 texCoord = vec2(tx * spriteWidth, ty);
-  texCoord.x += float(tileIndex - 1u) * spriteWidth;
-
-  outColor = texture(u_spritesheet, texCoord);
-}
-`;
-
-// ======= SHADER BILLBOARDS =======
-const billboardVS = `#version 300 es
-in vec2 a_offset;
-uniform vec2 u_screenPos;
-uniform float u_size;
-out vec2 v_texCoord;
-void main() {
-  vec2 pos = u_screenPos + vec2(a_offset.x, a_offset.y + 1.0) * u_size;
-  gl_Position = vec4(pos * 2.0 - 1.0, 0.0, 1.0);
-  v_texCoord = (a_offset + 1.0) * 0.5;
-}
-`;
-
-const billboardFS = `#version 300 es
-precision highp float;
-in vec2 v_texCoord;
-out vec4 outColor;
-uniform sampler2D u_spritesheet;
-uniform int u_spriteIndex;
-uniform float u_spriteCount;
-
-void main() {
-  vec2 uv = v_texCoord;
-  uv.x /= u_spriteCount;
-  uv.x += float(u_spriteIndex - 1) / u_spriteCount;
-  vec4 color = texture(u_spritesheet, uv);
-  if (color.a < 0.1) discard;
-  outColor = color;
-}
-`;
-
-// ======= SHADER BLOQUES 3D CON SOMBREADO CONFIGURABLE =======
-const blockVS = `#version 300 es
-in vec3 a_position;
-in vec2 a_texCoord;
-in vec3 a_normal;
-in vec4 a_instanceData;
-
-uniform vec4 u_camera;
-uniform vec2 u_resolution;
-
-out vec2 v_texCoord;
-out float v_depth;
-out float v_height;
-out vec3 v_normal;
-
-void main() {
-  vec3 instancePos = a_instanceData.xyz;
-  float height = a_instanceData.w;
-  
-  vec3 scaledPos = a_position;
-  scaledPos.y *= height;
-  
-  vec3 worldPos = scaledPos + instancePos;
-  
-  float dx = worldPos.x - u_camera.x;
-  float dy = worldPos.z - u_camera.y;
-  
-  float angle = u_camera.w;
-  float cosA = cos(-angle);
-  float sinA = sin(-angle);
-  
-  float rotX = dx * cosA - dy * sinA;
-  float rotY = dx * sinA + dy * cosA;
-  
-  if (rotY < 0.5) {
-    gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
-    v_texCoord = a_texCoord;
-    v_depth = -1.0;
-    v_height = height;
-    v_normal = a_normal;
-    return;
-  }
-  
-  float horizon = 0.3;
-  float screenX = 0.5 + rotX / rotY;
-  float screenY = 1.0 - (horizon + (u_camera.z - worldPos.y) / rotY);
-  
-  gl_Position = vec4(
-    screenX * 2.0 - 1.0,
-    screenY * 2.0 - 1.0,
-    rotY / ${MAX_RENDER_DISTANCE}.0,
-    1.0
-  );
-  
-  float isVertical = 1.0 - abs(a_normal.y);
-  v_texCoord = vec2(a_texCoord.x, a_texCoord.y * mix(1.0, height, isVertical));
-  v_depth = rotY;
-  v_height = height;
-  v_normal = a_normal;
-}
-`;
-
-const blockFS = `#version 300 es
-precision highp float;
-in vec2 v_texCoord;
-in float v_depth;
-in float v_height;
-in vec3 v_normal;
-out vec4 outColor;
-
-uniform sampler2D u_spritesheet;
-uniform int u_spriteIndex;
-uniform float u_spriteCount;
-uniform vec3 u_lightDir;
-uniform bool u_illumination;
-uniform float u_ambient;
-uniform float u_diffuse;
-
-void main() {
-  if (v_depth < 0.0) discard;
-  
-  float spriteWidth = 1.0 / u_spriteCount;
-  vec2 uv = vec2(v_texCoord.x * spriteWidth, fract(v_texCoord.y));
-  uv.x += float(u_spriteIndex - 1) * spriteWidth;
-
-  vec4 color = texture(u_spritesheet, uv);
-  if (color.a < 0.1) discard;
-  
-  if (!u_illumination) {
-    outColor = color;
-    return;
-  }
-  
-  float diffuseLight = max(dot(v_normal, u_lightDir), 0.0);
-  float lighting = u_ambient + diffuseLight * u_diffuse;
-  
-  outColor = vec4(color.rgb * lighting, color.a);
-}
-`;
-
-// ======= GEOMETRÍA CUBO CON NORMALES =======
-const cubeVertices = new Float32Array([
-  // Cara frontal (Z+) - Normal: (0, 0, 1)
-  -0.5, 0.0,  0.5,  0, 0,  0, 0, 1,
-   0.5, 0.0,  0.5,  1, 0,  0, 0, 1,
-   0.5, 1.0,  0.5,  1, 1,  0, 0, 1,
-  -0.5, 0.0,  0.5,  0, 0,  0, 0, 1,
-   0.5, 1.0,  0.5,  1, 1,  0, 0, 1,
-  -0.5, 1.0,  0.5,  0, 1,  0, 0, 1,
-
-  // Cara trasera (Z-) - Normal: (0, 0, -1)
-    // Cara trasera (Z-) - Normal: (0, 0, -1)
-   0.5, 0.0, -0.5,  1, 0,  0, 0, -1,
-  -0.5, 0.0, -0.5,  0, 0,  0, 0, -1,
-  -0.5, 1.0, -0.5,  0, 1,  0, 0, -1,
-   0.5, 0.0, -0.5,  1, 0,  0, 0, -1,
-  -0.5, 1.0, -0.5,  0, 1,  0, 0, -1,
-   0.5, 1.0, -0.5,  1, 1,  0, 0, -1,
-
-  // Cara izquierda (X-) - Normal: (-1, 0, 0)
-  -0.5, 0.0, -0.5,  0, 0,  -1, 0, 0,
-  -0.5, 0.0,  0.5,  1, 0,  -1, 0, 0,
-  -0.5, 1.0,  0.5,  1, 1,  -1, 0, 0,
-  -0.5, 0.0, -0.5,  0, 0,  -1, 0, 0,
-  -0.5, 1.0,  0.5,  1, 1,  -1, 0, 0,
-  -0.5, 1.0, -0.5,  0, 1,  -1, 0, 0,
-
-  // Cara derecha (X+) - Normal: (1, 0, 0)
-   0.5, 0.0,  0.5,  0, 0,  1, 0, 0,
-   0.5, 0.0, -0.5,  1, 0,  1, 0, 0,
-   0.5, 1.0, -0.5,  1, 1,  1, 0, 0,
-   0.5, 0.0,  0.5,  0, 0,  1, 0, 0,
-   0.5, 1.0, -0.5,  1, 1,  1, 0, 0,
-   0.5, 1.0,  0.5,  0, 1,  1, 0, 0,
-
-  // Cara superior (Y+) - Normal: (0, 1, 0)
-  -0.5, 1.0,  0.5,  0, 0,  0, 1, 0,
-   0.5, 1.0,  0.5,  1, 0,  0, 1, 0,
-   0.5, 1.0, -0.5,  1, 1,  0, 1, 0,
-  -0.5, 1.0,  0.5,  0, 0,  0, 1, 0,
-   0.5, 1.0, -0.5,  1, 1,  0, 1, 0,
-  -0.5, 1.0, -0.5,  0, 1,  0, 1, 0,
-
-  // Cara inferior (Y-) - Normal: (0, -1, 0)
-  -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
-   0.5, 0.0, -0.5,  1, 0,  0, -1, 0,
-   0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
-  -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
-   0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
-  -0.5, 0.0,  0.5,  0, 1,  0, -1, 0
-]);
-
-// ======= COMPILACIÓN SHADERS =======
-function createShader(gl, type, source) {
-  const shader = gl.createShader(type);
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    console.error('Shader error:', gl.getShaderInfoLog(shader));
-    throw new Error(gl.getShaderInfoLog(shader));
-  }
-  return shader;
-}
-
-function createProgram(gl, vsSource, fsSource) {
-  const vs = createShader(gl, gl.VERTEX_SHADER, vsSource);
-  const fs = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
-  const program = gl.createProgram();
-  gl.attachShader(program, vs);
-  gl.attachShader(program, fs);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.error('Program error:', gl.getProgramInfoLog(program));
-    throw new Error(gl.getProgramInfoLog(program));
-  }
-  return program;
-}
-
-const program = createProgram(gl, vsSource, fsSource);
-const billboardProgram = createProgram(gl, billboardVS, billboardFS);
-const blockProgram = createProgram(gl, blockVS, blockFS);
-const skyProgram = createProgram(gl, skyVS, skyFS);
-
-// ======= UNIFORMS Y ATRIBUTOS =======
-const uniformLocations = {
-  ground: {
-    spriteCount: gl.getUniformLocation(program, 'u_spriteCount'),
-    camera: gl.getUniformLocation(program, 'u_camera'),
-    tileMapTexture: gl.getUniformLocation(program, 'u_tileMapTexture'),
-    spritesheet: gl.getUniformLocation(program, 'u_spritesheet')
-  },
-  billboard: {
-    screenPos: gl.getUniformLocation(billboardProgram, 'u_screenPos'),
-    size: gl.getUniformLocation(billboardProgram, 'u_size'),
-    spriteIndex: gl.getUniformLocation(billboardProgram, 'u_spriteIndex'),
-    spriteCount: gl.getUniformLocation(billboardProgram, 'u_spriteCount'),
-    spritesheet: gl.getUniformLocation(billboardProgram, 'u_spritesheet')
-  },
-  block: {
-    camera: gl.getUniformLocation(blockProgram, 'u_camera'),
-    resolution: gl.getUniformLocation(blockProgram, 'u_resolution'),
-    spriteIndex: gl.getUniformLocation(blockProgram, 'u_spriteIndex'),
-    spriteCount: gl.getUniformLocation(blockProgram, 'u_spriteCount'),
-    spritesheet: gl.getUniformLocation(blockProgram, 'u_spritesheet'),
-    lightDir: gl.getUniformLocation(blockProgram, 'u_lightDir'),
-    illumination: gl.getUniformLocation(blockProgram, 'u_illumination'),
-    ambient: gl.getUniformLocation(blockProgram, 'u_ambient'),
-    diffuse: gl.getUniformLocation(blockProgram, 'u_diffuse')
-  },
-  sky: {
-    color1: gl.getUniformLocation(skyProgram, 'u_color1'),
-    color2: gl.getUniformLocation(skyProgram, 'u_color2')
-  }
-};
-
-const attribLocations = {
-  ground: {
-    position: gl.getAttribLocation(program, 'a_position')
-  },
-  billboard: {
-    offset: gl.getAttribLocation(billboardProgram, 'a_offset')
-  },
-  block: {
-    position: gl.getAttribLocation(blockProgram, 'a_position'),
-    texCoord: gl.getAttribLocation(blockProgram, 'a_texCoord'),
-    normal: gl.getAttribLocation(blockProgram, 'a_normal'),
-    instanceData: gl.getAttribLocation(blockProgram, 'a_instanceData')
-  },
-  sky: {
-    position: gl.getAttribLocation(skyProgram, 'a_position')
-  }
-};
-
-// ======= BUFFERS =======
-const positionBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-
-const billboardBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, billboardBuffer);
-gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
-
-const cubeBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, cubeBuffer);
-gl.bufferData(gl.ARRAY_BUFFER, cubeVertices, gl.STATIC_DRAW);
-
-const instanceBuffer = gl.createBuffer();
-
-const skyBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, skyBuffer);
-gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-
-// ======= FRUSTUM CULLING =======
-function updateTrigCache() {
-  if (cameraAngleCache !== camera.angle) {
-    cameraAngleCache = camera.angle;
-    cachedCosA = Math.cos(-camera.angle);
-    cachedSinA = Math.sin(-camera.angle);
-  }
-}
-
-function isInFrustum(worldX, worldY) {
-  const dx = worldX - camera.x;
-  const dy = worldY - camera.y;
-  const rotY = dx * cachedSinA + dy * cachedCosA;
-  if (rotY < 0.1 || rotY > MAX_RENDER_DISTANCE) return false;
-  const rotX = dx * cachedCosA - dy * cachedSinA;
-  const screenX = 0.5 + rotX / rotY;
-  return screenX >= -FRUSTUM_MARGIN && screenX <= (1.0 + FRUSTUM_MARGIN);
-}
-
-// ======= RECOLECTAR OBJETOS =======
-const tempObjects = new Array(MAP_WIDTH * MAP_HEIGHT + 1000); 
-let objectCount = 0;
-
-function collectRenderableObjects() {
-  objectCount = 0;
-  const camX = camera.x;
-  const camY = camera.y;
-  
-  for (let i = 0; i < tileMap.length; i++) {
-    const tile = tileMap[i];
-    if (tile === 0) continue;
-    
-    const mapX = i % MAP_WIDTH;
-    const mapY = Math.floor(i / MAP_WIDTH);
-    const worldX = mapX + 0.5;
-    const worldY = mapY + 0.5;  // ← CAMBIO AQUÍ
-    
-    if (!isInFrustum(worldX, worldY)) continue;  // ← Y AQUÍ
-    
-    const dx = worldX - camX;
-    const dy = worldY - camY;  // ← Y AQUÍ
-    const distSq = dx * dx + dy * dy;  // ← Y AQUÍ
-    
-    if (isBillboard(tile)) {
-      const proj = projectToScreen(worldX, worldY);  // ← Y AQUÍ
-      if (proj.visible) {
-        tempObjects[objectCount++] = {
-          type: 'billboard',
-          x: worldX, 
-          y: worldY,  // ← Y AQUÍ
-          tile, 
-          dist: distSq, 
-          proj
-        };
-      }
-    } else if (isBlock(tile)) {
-      tempObjects[objectCount++] = {
-        type: 'block',
-        x: worldX,
-        y: 0.0,
-        z: worldY,  // ← Y AQUÍ (mantiene z pero con worldY)
-        tile,
-        dist: distSq
-      };
-    }
-  }
-  // Objetos independientes
-for (const obj of independentObjects) {
-  // Lee los valores sin modificar el objeto
-  const worldX = obj.x;
-  const worldY = obj.y;  // obj.y es la coordenada en el plano
-  const height = obj.z;  // obj.z es la altura
-  
-  if (!isInFrustum(worldX, worldY)) continue;
-  
-  const dx = worldX - camX;
-  const dy = worldY - camY;
-  const distSq = dx * dx + dy * dy;
-  
-  if (isBillboard(obj.tile)) {
-    const proj = projectToScreenWithHeight(worldX, worldY, height);
-    if (proj.visible) {
-      tempObjects[objectCount++] = {
-        type: 'billboard',
-        x: worldX,
-        y: worldY,
-        tile: obj.tile,
-        dist: distSq,
-        proj
-      };
-    }
-  } else if (isBlock(obj.tile)) {
-    tempObjects[objectCount++] = {
-      type: 'block',
-      x: worldX,
-      y: height,   // altura del objeto
-      z: worldY,   // coordenada Z en el mundo
-      tile: obj.tile,
-      dist: distSq
-    };
-  }
-}
-  
-  const objects = tempObjects.slice(0, objectCount);
-  objects.sort((a, b) => b.dist - a.dist);
-  return objects;
-}
-
-function projectToScreenWithHeight(worldX, worldY, height) {
-  const dx = worldX - camera.x;
-  const dy = worldY - camera.y;
-
-  const rotX = dx * cachedCosA - dy * cachedSinA;
-  const rotY = dx * cachedSinA + dy * cachedCosA;
-
-  const horizon = 0.3;
-  const invRotY = 1.0 / (rotY - 0.001);
-  
-  const perspective = (camera.z - height) * invRotY;  // ← AQUÍ se usa la altura
-
-  const screenX = 0.5 + rotX * invRotY;
-  const screenY = 1.0 - (horizon + perspective);
-
-  return {
-    visible: rotY > 0.01 && screenX >= 0 && screenX <= 1 && screenY >= -3 && screenY <= 1,
-    x: screenX,
-    y: screenY,
-    size: invRotY
-  };
-}
-
-let sky_colors = true;
-
-// ======= RENDER =======
-let lastTime = 0;
-let frameCount = 0;
-let fps = 0;
-
-function render(time) {
-  frameCount++;
-  if (time - lastTime >= 1000) {
-    fps = frameCount;
-    frameCount = 0;
-    lastTime = time;
-    document.getElementById('fps').textContent = `FPS: ${fps}`;
-    document.getElementById('vx').textContent = `vx: ${player.vx}`;
-    document.getElementById('vy').textContent = `vy: ${player.vy}`;
-    document.getElementById('v').textContent = `vy: ${Math.abs(player.vy)+Math.abs(player.vx)}`;
-
-  }
-  updatePlayer(player, keys);
-  updateCamera();
-  updateTrigCache();
-  
-  gl.viewport(0, 0, canvas.width, canvas.height);
-  
-  // Cielo
-  if (sky_colors){
-    gl.disable(gl.DEPTH_TEST);
-    gl.disable(gl.BLEND);
-    gl.useProgram(skyProgram);
-    gl.bindBuffer(gl.ARRAY_BUFFER, skyBuffer);
-    gl.enableVertexAttribArray(attribLocations.sky.position);
-    gl.vertexAttribPointer(attribLocations.sky.position, 2, gl.FLOAT, false, 0, 0);
-    gl.uniform3f(uniformLocations.sky.color1, color1[0], color1[1], color1[2]);
-    gl.uniform3f(uniformLocations.sky.color2, color2[0], color2[1], color2[2]);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  }
-  
-  // Suelo
-  gl.disable(gl.DEPTH_TEST);
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-  
-  gl.useProgram(program);
-  gl.enableVertexAttribArray(attribLocations.ground.position);
-  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-  gl.vertexAttribPointer(attribLocations.ground.position, 2, gl.FLOAT, false, 0, 0);
-  gl.uniform1f(uniformLocations.ground.spriteCount, tile_items_size);
-  gl.uniform4f(uniformLocations.ground.camera, camera.x, camera.y, camera.z, camera.angle);
-  
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, spriteTexture);
-  gl.uniform1i(uniformLocations.ground.spritesheet, 0);
-  
-  gl.activeTexture(gl.TEXTURE1);
-  gl.bindTexture(gl.TEXTURE_2D, tileMapTexture);
-  gl.uniform1i(uniformLocations.ground.tileMapTexture, 1);
-  
-  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  
-  gl.clear(gl.DEPTH_BUFFER_BIT);
-  
-  const allObjects = collectRenderableObjects();
-
-  gl.enable(gl.DEPTH_TEST);
-  gl.depthFunc(gl.LEQUAL);
-  gl.depthMask(true);
-  gl.disable(gl.BLEND);
-
-  let currentTile = null;
-  let batchInstances = [];
-
-  for (const obj of allObjects) {
-    if (obj.type === 'block') {
-      if (currentTile === null) {
-        currentTile = obj.tile;
-      }
-
-      if (currentTile === obj.tile) {
-        batchInstances.push(obj);
-      } else {
-        if (batchInstances.length > 0) {
-          drawBlocksInstanced(currentTile, batchInstances);
-        }
-        currentTile = obj.tile;
-        batchInstances = [obj];
-      }
-    } else if (obj.type === 'billboard') {
-      if (batchInstances.length > 0) {
-        drawBlocksInstanced(currentTile, batchInstances);
-        batchInstances = [];
-        currentTile = null;
-      }
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-      gl.enable(gl.DEPTH_TEST);
-      gl.depthMask(false);
-
-      drawBillboard(obj);
-
-      gl.depthMask(true);
-      gl.disable(gl.BLEND);
-    }
-  }
-
-  if (batchInstances.length > 0) {
-    drawBlocksInstanced(currentTile, batchInstances);
-  }
-
-  gl.disable(gl.DEPTH_TEST);
-  gl.enable(gl.BLEND);
-
-  requestAnimationFrame(render);
-}
-
-function drawBlocksInstanced(tileType, instances) {
-  if (!instances || instances.length === 0) return;
-  
-  gl.useProgram(blockProgram);
-  
-  const height = tile_heights[tileType] || 1;
-  
-  const instanceData = new Float32Array(instances.length * 4);
-  for (let i = 0; i < instances.length; i++) {
-    instanceData[i * 4 + 0] = instances[i].x;
-    instanceData[i * 4 + 1] = instances[i].y;
-    instanceData[i * 4 + 2] = instances[i].z;
-    instanceData[i * 4 + 3] = height;
-  }
-  
-  gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.DYNAMIC_DRAW);
-  
-  gl.bindBuffer(gl.ARRAY_BUFFER, cubeBuffer);
-  
-  gl.enableVertexAttribArray(attribLocations.block.position);
-  gl.vertexAttribPointer(attribLocations.block.position, 3, gl.FLOAT, false, 32, 0);
-  
-  gl.enableVertexAttribArray(attribLocations.block.texCoord);
-  gl.vertexAttribPointer(attribLocations.block.texCoord, 2, gl.FLOAT, false, 32, 12);
-  
-  gl.enableVertexAttribArray(attribLocations.block.normal);
-  gl.vertexAttribPointer(attribLocations.block.normal, 3, gl.FLOAT, false, 32, 20);
-  
-  gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
-  gl.enableVertexAttribArray(attribLocations.block.instanceData);
-  gl.vertexAttribPointer(attribLocations.block.instanceData, 4, gl.FLOAT, false, 16, 0);
-  gl.vertexAttribDivisor(attribLocations.block.instanceData, 1);
-  
-  gl.uniform4f(uniformLocations.block.camera, camera.x, camera.y, camera.z, camera.angle);
-  gl.uniform2f(uniformLocations.block.resolution, canvas.width, canvas.height);
-  gl.uniform1i(uniformLocations.block.spriteIndex, tileType);
-  gl.uniform1f(uniformLocations.block.spriteCount, tile_items_size);
-  
-  gl.uniform1i(uniformLocations.block.illumination, ILLUMINATION);
-  gl.uniform1f(uniformLocations.block.ambient, AMBIENT_LIGHT);
-  gl.uniform1f(uniformLocations.block.diffuse, LIGHT_DIFFUSE);
-  
-  const len = Math.sqrt(lightDir[0]*lightDir[0] + lightDir[1]*lightDir[1] + lightDir[2]*lightDir[2]);
-  gl.uniform3f(uniformLocations.block.lightDir, lightDir[0]/len, lightDir[1]/len, lightDir[2]/len);
-  
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, spriteTexture);
-  gl.uniform1i(uniformLocations.block.spritesheet, 0);
-  
-  gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, instances.length);
-  
-  gl.vertexAttribDivisor(attribLocations.block.instanceData, 0);
-}
-
-function drawBillboard(billboard) {
-  gl.useProgram(billboardProgram);
-  
-  gl.bindBuffer(gl.ARRAY_BUFFER, billboardBuffer);
-  gl.enableVertexAttribArray(attribLocations.billboard.offset);
-  gl.vertexAttribPointer(attribLocations.billboard.offset, 2, gl.FLOAT, false, 0, 0);
-  
-  gl.uniform2f(uniformLocations.billboard.screenPos, billboard.proj.x, billboard.proj.y);
-  gl.uniform1f(uniformLocations.billboard.size, billboard.proj.size);
-  gl.uniform1i(uniformLocations.billboard.spriteIndex, billboard.tile);
-  gl.uniform1f(uniformLocations.billboard.spriteCount, tile_items_size);
-  
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, spriteTexture);
-  gl.uniform1i(uniformLocations.billboard.spritesheet, 0);
-  
-  // Ajuste de depth para evitar z-fighting
-  gl.depthFunc(gl.LEQUAL);
-  gl.polygonOffset(-1.0, -1.0);
-  gl.enable(gl.POLYGON_OFFSET_FILL);
-  
-  gl.drawArrays(gl.TRIANGLES, 0, 6);
-  
-  gl.disable(gl.POLYGON_OFFSET_FILL);
-}
-
-function projectToScreen(worldX, worldY) {
-  const dx = worldX - camera.x;
-  const dy = worldY - camera.y;
-
-  const rotX = dx * cachedCosA - dy * cachedSinA;
-  const rotY = dx * cachedSinA + dy * cachedCosA;
-
-  const horizon = 0.3;
-  const invRotY = 1.0 / (rotY - 0.001);
-  const perspective = camera.z * invRotY;
-
-  const screenX = 0.5 + rotX * invRotY;
-  const screenY = 1.0 - (horizon + perspective);
-
-  return {
-    visible: rotY > -3 && screenX >= -3 && screenX <= 1 && screenY >= -3 && screenY <= 1,
-    x: screenX,
-    y: screenY,
-    size: invRotY
-  };
-}
-
-function isBillboard(n) { return billboard_tiles_set.has(n); }
-function isBlock(n) { return block_tiles_set.has(n); }
-
-// ======= CONTROLES =======
+// ====== Control de flechas y táctil
 const keys = {};
+
 window.addEventListener('keydown', e => {
   keys[e.key] = true;
   
   if (e.key === 'l' || e.key === 'L') {
     ILLUMINATION = !ILLUMINATION;
-    document.getElementById('lightStatus').textContent = ILLUMINATION ? 'ON' : 'OFF';
     console.log('Iluminación:', ILLUMINATION ? 'ACTIVADA' : 'DESACTIVADA');
   }
 });
+
 window.addEventListener('keyup', e => keys[e.key] = false);
 
-/*
-function updateCamera() {
-  const speed = 0.2;
-  const rotSpeed = 0.05;
-
-  if (keys['ArrowUp']) {
-    camera.x -= Math.sin(camera.angle) * speed;
-    camera.y += Math.cos(camera.angle) * speed;
+// ====== Controles táctiles ======
+function setupTouchControls() {
+  const btnUp = document.getElementById('btn-up');
+  const btnDown = document.getElementById('btn-down');
+  const btnLeft = document.getElementById('btn-left');
+  const btnRight = document.getElementById('btn-right');
+  const btnAction = document.getElementById('btn-action');
+  
+  // Mapeo de botones a teclas
+  const buttonKeyMap = {
+    'btn-up': 'ArrowUp',
+    'btn-down': 'ArrowDown',
+    'btn-left': 'ArrowLeft',
+    'btn-right': 'ArrowRight',
+    'btn-action': ' ' // Espacio para acción
+  };
+  
+  // Función para manejar inicio de toque
+  function handleTouchStart(e, buttonId) {
+    e.preventDefault();
+    const key = buttonKeyMap[buttonId];
+    keys[key] = true;
   }
-  if (keys['ArrowDown']) {
-    camera.x += Math.sin(camera.angle) * speed;
-    camera.y -= Math.cos(camera.angle) * speed;
+  
+  // Función para manejar fin de toque
+  function handleTouchEnd(e, buttonId) {
+    e.preventDefault();
+    const key = buttonKeyMap[buttonId];
+    keys[key] = false;
   }
-  if (keys['ArrowLeft']) camera.angle += rotSpeed;
-  if (keys['ArrowRight']) camera.angle -= rotSpeed;
-  if (keys['w']) camera.z += 0.1;
-  if (keys['s']) camera.z = Math.max(0.1, camera.z - 0.1);
-}*/
-
-function updateCamera() {
-  updatePlayerCamera(camera, player);
+  
+  // Asignar eventos a cada botón
+  [btnUp, btnDown, btnLeft, btnRight, btnAction].forEach(btn => {
+    btn.addEventListener('touchstart', (e) => handleTouchStart(e, btn.id));
+    btn.addEventListener('touchend', (e) => handleTouchEnd(e, btn.id));
+    btn.addEventListener('touchcancel', (e) => handleTouchEnd(e, btn.id));
+    
+    // También soportar mouse para testing en desktop
+    btn.addEventListener('mousedown', (e) => handleTouchStart(e, btn.id));
+    btn.addEventListener('mouseup', (e) => handleTouchEnd(e, btn.id));
+    btn.addEventListener('mouseleave', (e) => handleTouchEnd(e, btn.id));
+  });
 }
 
-console.log("Motor 3D Mode7 - Compatible Firefox");
-console.log("================================");
-console.log("Controles:");
-console.log("  Flechas = Mover");
-console.log("  W/S = Altura");
-console.log("  L = Toggle Iluminación");
-console.log("================================");
-console.log("Configuración actual:");
-console.log("  Iluminación:", ILLUMINATION ? "ON" : "OFF");
-console.log("  Luz ambiental:", AMBIENT_LIGHT);
-console.log("  Luz difusa:", LIGHT_DIFFUSE);
-console.log("  Dirección luz:", lightDir);
+// Inicializar controles táctiles
+setupTouchControls();
 
-requestAnimationFrame(render);
+// ======= Configuración =======
+let MAX_RENDER_DISTANCE = 50;
+let FRUSTUM_MARGIN = 0.4;
+
+let billboard_tiles = [9,10,11,12,13,14];
+let block_tiles = [2,4,5,7, 8];
+const billboard_tiles_set = new Set(billboard_tiles);
+const block_tiles_set = new Set(block_tiles);
+
+let tile_heights = {
+   2:2,4: 3, 5: 5, 7: 4, 8: 5 };
+
+const TILE_SIZE = 32;
+const MAP_WIDTH = 200;
+const MAP_HEIGHT = 200;
+</script>
+
+<script src="image64.js"></script>
+<script src="lavamap.js"></script>
+<script src="collision.js"></script>
+<script src="glitter7engine.js"></script>
+<script src="camera.js"></script>
+<script src="player.js"></script>
+<script src="controls.js"></script>
+
+<script>
+// Recursos
+tileMap = TileMaps["lavamap"].layers[0].data
+
+// Crear el motor
+const canvas = document.getElementById('glCanvas');
+const engine = new Glitter7engine(canvas, {
+  map: {
+    array: tileMap,
+    mapWidth: 200,
+    mapHeight: 200,
+  },
+  tileSize: 32,
+  maxRenderDistance: 100,
+  
+  billboardTiles: billboard_tiles,
+  blockTiles: block_tiles,
+  tileHeights: tile_heights,
+  
+  light: {
+    illumination: true,
+    ambientLight: 0.5,
+    lightDiffuse: 0.7,
+    lightDir: [0.3, 0.7, 0.5]
+  },
+  
+  skydome: {
+    enabled: true,
+    radius: 100,
+    segments: 12,
+    rep_h: 1,
+    rep_v: 7
+  },
+  
+  fog: {
+    enabled: true,
+    start: 60,
+    end: 100,
+    color: [0.5, 0.5, 0.5]
+  },
+
+  defaultBillboardGround: 3,
+  //billboardGroundTiles: {3: 4}
+});
+
+// Cargar recursos
+imageToBase64("img/img_cielo.png", (img) => engine.loadSkydomeTexture(img))
+imageToBase64("img/tilesheet2.png", (img) => engine.loadSpritesheet(img))
+
+// Objetos independientes
+let playerObject = { tile: 11, x: 10.5, y: 0.5, z: 0.0 };
+const independentObjects = [
+  playerObject,
+  { tile: 11, x: 10.5, y: 0.5, z: 0.0 },
+  { tile: 7, x: 15.0, y: 15.0, z: 0.0 },
+  { tile: 4, x: 20.5, y: 20.5, z: 0.0 },
+  { tile: 8, x: 25.0, y: 12.0, z: 0.0 }
+];
+
+const player = initPlayer(playerObject, tileMap, independentObjects);
+applyMovementPreset('REALISTIC');
+
+// Loop de render
+function gameLoop() {
+  engine.render(independentObjects, true);
+  updatePlayer(player, keys);
+  updateCamera();
+  requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+
+function updateCamera() {
+  updatePlayerCamera(engine.camera, player);
+}
+
+// Función auxiliar para pasar a base64 las imágenes
+function imageToBase64(url, callback) {
+  const img = new Image();
+  img.crossOrigin = "Anonymous";
+  img.onload = function() {
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const base64 = canvas.toDataURL("image/png");
+    callback(base64);
+  };
+  img.src = url;
+}
 </script>
 </body>
 </html>

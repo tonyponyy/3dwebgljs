@@ -1,15 +1,15 @@
-// player.js - Lógica del jugador (movimiento, salto, física) con INERCIA
+// player.js - Lógica del jugador (movimiento, salto, física) con INERCIA y ANIMACIONES
 
 const PLAYER_CONFIG = {
   // Movimiento
-  MOVE_SPEED: 0.15,
-  STRAFE_SPEED: 0.12,
+  MOVE_SPEED: 0.25,
+  STRAFE_SPEED: 0.20,
   ROTATION_SPEED: 0.05,
   
   // Inercia
-  ACCELERATION: 0.008,        // Qué tan rápido acelera
-  DECELERATION: 0.012,        // Qué tan rápido frena (más alto = frena más rápido)
-  AIR_CONTROL: 0.3,           // Control en el aire (0-1, menor = menos control)
+  ACCELERATION: 0.015,
+  DECELERATION: 0.012,
+  AIR_CONTROL: 0.3,
   
   // Rotación con inercia
   ROTATION_ACCELERATION: 0.003,
@@ -23,8 +23,19 @@ const PLAYER_CONFIG = {
   COYOTE_TIME: 0.2,
   
   // Fricción
-  GROUND_FRICTION: 0.88,      // Fricción en el suelo (menor = más deslizante)
-  AIR_FRICTION: 0.98          // Fricción en el aire (casi sin fricción)
+  GROUND_FRICTION: 0.88,
+  AIR_FRICTION: 0.98
+};
+
+// Configuración de animaciones
+const ANIMATION_CONFIG = {
+  TILES: {
+    IDLE: 10,
+    WALK: [11, 12, 13],
+    JUMP: 14
+  },
+  WALK_SPEED: 0.15,  // Velocidad de animación de caminar (frames por frame del juego)
+  MOVEMENT_THRESHOLD: 0.01  // Velocidad mínima para considerar que está caminando
 };
 
 /**
@@ -39,7 +50,7 @@ function initPlayer(playerObject, tileMap, independentObjects) {
     vy: 0,
     velocityZ: 0,
     
-    // Velocidades objetivo (donde quiere ir el jugador)
+    // Velocidades objetivo
     targetVx: 0,
     targetVy: 0,
     
@@ -54,10 +65,73 @@ function initPlayer(playerObject, tileMap, independentObjects) {
     coyoteTimer: 0,
     wasGrounded: false,
     
+    // Sistema de animación
+    currentAnimation: 'IDLE',
+    animationFrame: 0,
+    animationTimer: 0,
+    
     // Referencias
     tileMap: tileMap,
     independentObjects: independentObjects
   };
+}
+
+/**
+ * Actualiza la animación del jugador
+ */
+function updatePlayerAnimation(player, grounded) {
+  const speed = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
+  const isMoving = speed > ANIMATION_CONFIG.MOVEMENT_THRESHOLD;
+  
+  let newAnimation = 'IDLE';
+  
+  // Determinar qué animación usar
+  if (!grounded) {
+    newAnimation = 'JUMP';
+  } else if (isMoving) {
+    newAnimation = 'WALK';
+  } else {
+    newAnimation = 'IDLE';
+  }
+  
+  // Si cambió la animación, resetear el frame
+  if (newAnimation !== player.currentAnimation) {
+    player.currentAnimation = newAnimation;
+    player.animationFrame = 0;
+    player.animationTimer = 0;
+  }
+  
+  // Actualizar frame de animación de caminar
+  if (player.currentAnimation === 'WALK') {
+    player.animationTimer += ANIMATION_CONFIG.WALK_SPEED;
+    
+    if (player.animationTimer >= 1) {
+      player.animationTimer = 0;
+      player.animationFrame = (player.animationFrame + 1) % ANIMATION_CONFIG.TILES.WALK.length;
+    }
+  }
+  
+  // Aplicar el tile correspondiente
+  let tileToApply;
+  
+  switch (player.currentAnimation) {
+    case 'IDLE':
+      tileToApply = ANIMATION_CONFIG.TILES.IDLE;
+      break;
+    case 'WALK':
+      tileToApply = ANIMATION_CONFIG.TILES.WALK[player.animationFrame];
+      break;
+    case 'JUMP':
+      tileToApply = ANIMATION_CONFIG.TILES.JUMP;
+      break;
+    default:
+      tileToApply = ANIMATION_CONFIG.TILES.IDLE;
+  }
+  
+  // Cambiar el tile del jugador (asumiendo que el jugador es independentObjects[0])
+  if (player.independentObjects && player.independentObjects[0]) {
+    player.independentObjects[0].tile = tileToApply;
+  }
 }
 
 /**
@@ -81,12 +155,10 @@ function updatePlayer(player, keys, deltaTime = 1/60) {
   
   // Interpolar velocidad de rotación
   if (targetRotationVelocity !== 0) {
-    // Acelerando
     player.rotationVelocity += Math.sign(targetRotationVelocity) * PLAYER_CONFIG.ROTATION_ACCELERATION;
     player.rotationVelocity = Math.max(-PLAYER_CONFIG.MAX_ROTATION_SPEED, 
                                        Math.min(PLAYER_CONFIG.MAX_ROTATION_SPEED, player.rotationVelocity));
   } else {
-    // Frenando
     player.rotationVelocity *= (1 - PLAYER_CONFIG.ROTATION_DECELERATION);
     if (Math.abs(player.rotationVelocity) < 0.001) player.rotationVelocity = 0;
   }
@@ -97,7 +169,6 @@ function updatePlayer(player, keys, deltaTime = 1/60) {
   // MOVIMIENTO CON INERCIA
   // ========================================
   
-  // Calcular velocidad objetivo basada en input
   let targetVx = 0;
   let targetVy = 0;
   
@@ -110,7 +181,6 @@ function updatePlayer(player, keys, deltaTime = 1/60) {
     targetVy -= Math.cos(player.angle) * PLAYER_CONFIG.MOVE_SPEED;
   }
   
-  // Movimiento lateral (strafe) - opcional
   if (keys['a'] || keys['A']) {
     targetVx -= Math.cos(player.angle) * PLAYER_CONFIG.STRAFE_SPEED;
     targetVy -= Math.sin(player.angle) * PLAYER_CONFIG.STRAFE_SPEED;
@@ -120,12 +190,10 @@ function updatePlayer(player, keys, deltaTime = 1/60) {
     targetVy += Math.sin(player.angle) * PLAYER_CONFIG.STRAFE_SPEED;
   }
   
-  // Control en el aire vs suelo
   const controlFactor = grounded ? 1.0 : PLAYER_CONFIG.AIR_CONTROL;
   const acceleration = PLAYER_CONFIG.ACCELERATION * controlFactor;
   const deceleration = PLAYER_CONFIG.DECELERATION * controlFactor;
   
-  // Interpolar hacia velocidad objetivo (aceleración)
   if (targetVx !== 0 || targetVy !== 0) {
     const dx = targetVx - player.vx;
     const dy = targetVy - player.vy;
@@ -133,16 +201,13 @@ function updatePlayer(player, keys, deltaTime = 1/60) {
     player.vx += dx * acceleration;
     player.vy += dy * acceleration;
   } else {
-    // Desaceleración cuando no hay input
     player.vx *= (1 - deceleration);
     player.vy *= (1 - deceleration);
     
-    // Detener completamente si la velocidad es muy baja
     if (Math.abs(player.vx) < 0.001) player.vx = 0;
     if (Math.abs(player.vy) < 0.001) player.vy = 0;
   }
   
-  // Aplicar fricción (más fuerte en el suelo)
   const friction = grounded ? PLAYER_CONFIG.GROUND_FRICTION : PLAYER_CONFIG.AIR_FRICTION;
   player.vx *= friction;
   player.vy *= friction;
@@ -163,12 +228,11 @@ function updatePlayer(player, keys, deltaTime = 1/60) {
     player.independentObjects
   );
   
-  // Si hay colisión, frenar la velocidad en esa dirección
   if (resolved.x === obj.x) {
-    player.vx *= 0.5; // Frenar en X si colisionamos
+    player.vx *= 0.5;
   }
   if (resolved.y === obj.y) {
-    player.vy *= 0.5; // Frenar en Y si colisionamos
+    player.vy *= 0.5;
   }
   
   obj.x = resolved.x;
@@ -180,7 +244,6 @@ function updatePlayer(player, keys, deltaTime = 1/60) {
   
   const groundHeight = getTerrainHeight(obj.x, obj.y, player.tileMap, player.independentObjects);
   
-  // Sistema de coyote time
   if (grounded) {
     player.coyoteTimer = PLAYER_CONFIG.COYOTE_TIME;
     player.jumpsRemaining = 2;
@@ -192,11 +255,9 @@ function updatePlayer(player, keys, deltaTime = 1/60) {
     }
   }
   
-  // Determinar si podemos saltar
   const canCoyoteJump = player.coyoteTimer > 0 && player.jumpsRemaining === 2;
   const canDoubleJump = player.jumpsRemaining > 0;
   
-  // Salto con doble salto y coyote time
   if ((keys[' '] || keys['Spacebar']) && !player.isJumping) {
     if (grounded || canCoyoteJump || canDoubleJump) {
       player.velocityZ = PLAYER_CONFIG.JUMP_FORCE;
@@ -206,12 +267,10 @@ function updatePlayer(player, keys, deltaTime = 1/60) {
     }
   }
   
-  // Liberar flag de salto cuando se suelta la tecla
   if (!keys[' '] && !keys['Spacebar']) {
     player.isJumping = false;
   }
   
-  // Aplicar gravedad
   if (!grounded || player.velocityZ > 0) {
     player.velocityZ -= PLAYER_CONFIG.GRAVITY;
     player.velocityZ = Math.max(player.velocityZ, -PLAYER_CONFIG.MAX_FALL_SPEED);
@@ -219,14 +278,17 @@ function updatePlayer(player, keys, deltaTime = 1/60) {
     player.velocityZ = 0;
   }
   
-  // Actualizar posición vertical
   obj.z += player.velocityZ;
   
-  // Mantener sobre el suelo
   if (obj.z < groundHeight) {
     obj.z = groundHeight;
     player.velocityZ = 0;
   }
+  
+  // ========================================
+  // ACTUALIZAR ANIMACIÓN
+  // ========================================
+  updatePlayerAnimation(player, grounded);
 }
 
 /**
@@ -242,7 +304,7 @@ function getPlayerPosition(player) {
 }
 
 /**
- * Obtiene la velocidad actual del jugador (útil para efectos visuales)
+ * Obtiene la velocidad actual del jugador
  */
 function getPlayerVelocity(player) {
   const speed = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
@@ -256,7 +318,7 @@ function getPlayerVelocity(player) {
 }
 
 /**
- * Aplica un impulso al jugador (útil para knockback, explosiones, etc)
+ * Aplica un impulso al jugador
  */
 function applyImpulse(player, vx, vy, vz) {
   player.vx += vx;
@@ -265,19 +327,28 @@ function applyImpulse(player, vx, vy, vz) {
 }
 
 /**
+ * Obtiene el estado actual de animación (útil para debugging)
+ */
+function getPlayerAnimationState(player) {
+  return {
+    animation: player.currentAnimation,
+    frame: player.animationFrame,
+    currentTile: player.independentObjects[0]?.tile || 'N/A'
+  };
+}
+
+/**
  * Presets de configuración para diferentes sensaciones de movimiento
  */
 const MOVEMENT_PRESETS = {
-  // Movimiento realista con inercia notable
   REALISTIC: {
-    ACCELERATION: 2,
+    ACCELERATION: 0.4,
     DECELERATION: 0.012,
     GROUND_FRICTION: 0.88,
     AIR_FRICTION: 0.98,
     AIR_CONTROL: 0.3
   },
   
-  // Movimiento arcade (más responsivo)
   ARCADE: {
     ACCELERATION: 0.02,
     DECELERATION: 0.08,
@@ -286,7 +357,6 @@ const MOVEMENT_PRESETS = {
     AIR_CONTROL: 0.6
   },
   
-  // Movimiento en hielo (muy deslizante)
   ICY: {
     ACCELERATION: 0.005,
     DECELERATION: 0.005,
@@ -295,9 +365,8 @@ const MOVEMENT_PRESETS = {
     AIR_CONTROL: 0.2
   },
   
-  // Movimiento preciso (poco deslizamiento)
   PRECISE: {
-    ACCELERATION: 5,
+    ACCELERATION: 0.05,
     DECELERATION: 0.2,
     GROUND_FRICTION: 0.5,
     AIR_FRICTION: 0.9,

@@ -15,40 +15,210 @@
       padding: 10px;
       border-radius: 5px;
       font-size: 14px;
+      z-index: 100;
     }
     #fps {
       color: #0f0;
       font-weight: bold;
     }
+    
+    /* Controles móviles */
+    .mobile-controls {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 250px;
+      pointer-events: none;
+      z-index: 50;
+    }
+    
+    /* Pad direccional (D-Pad) */
+    #dpad-area {
+      position: absolute;
+      bottom: 30px;
+      left: 30px;
+      width: 180px;
+      height: 180px;
+      pointer-events: all;
+    }
+    
+    .dpad-btn {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      background: rgba(255, 255, 255, 0.2);
+      border: 3px solid rgba(255, 255, 255, 0.5);
+      color: white;
+      font-size: 28px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+      user-select: none;
+      cursor: pointer;
+    }
+    
+    .dpad-btn:active {
+      background: rgba(255, 255, 255, 0.4);
+      transform: scale(0.95);
+    }
+    
+    #btn-up {
+      top: 0;
+      left: 60px;
+      border-radius: 10px 10px 5px 5px;
+    }
+    
+    #btn-down {
+      bottom: 0;
+      left: 60px;
+      border-radius: 5px 5px 10px 10px;
+    }
+    
+    #btn-left {
+      top: 60px;
+      left: 0;
+      border-radius: 10px 5px 5px 10px;
+    }
+    
+    #btn-right {
+      top: 60px;
+      right: 0;
+      border-radius: 5px 10px 10px 5px;
+    }
+    
+    /* Centro del D-Pad (decorativo) */
+    #dpad-center {
+      position: absolute;
+      top: 60px;
+      left: 60px;
+      width: 60px;
+      height: 60px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 4px solid rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    
+    /* Botón de acción */
+    #action-button {
+      position: absolute;
+      bottom: 60px;
+      right: 50px;
+      pointer-events: all;
+    }
+    
+    .action-btn {
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 4px solid rgba(255, 255, 255, 0.2);
+      color: white;
+      font-size: 32px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+      user-select: none;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+    
+    .action-btn:active {
+      background: rgba(138, 134, 150, 0.5);
+      transform: scale(0.92);
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    }
+
   </style>
 </head>
 <body>
 <canvas id="glCanvas" width="960" height="540"></canvas>
-<div id="controls">
-  <div><span id="fps">FPS: 0</span></div>
-  <div><span id="vx">0</span></div>
-    <div><span id="vy">0</span></div>
-    <div><span id="v">0</span></div>
 
-  <div>Controles: Flechas = mover | W/S = altura</div>
-  <div>L = Toggle iluminación | <span id="lightStatus">ON</span></div>
+<!-- Controles móviles -->
+<div class="mobile-controls">
+  <!-- D-Pad direccional -->
+  <div id="dpad-area">
+    <div id="dpad-center"></div>
+    <div class="dpad-btn" id="btn-up">▲</div>
+    <div class="dpad-btn" id="btn-down">▼</div>
+    <div class="dpad-btn" id="btn-left">◄</div>
+    <div class="dpad-btn" id="btn-right">►</div>
+  </div>
+  
+  <!-- Botón de acción -->
+  <div id="action-button">
+    <div class="action-btn" id="btn-action"></div>
+  </div>
 </div>
+
 <script>
-// ====== Control de flechas
-// ======= CONTROLES =======
+// ====== Control de flechas y táctil
 const keys = {};
+
 window.addEventListener('keydown', e => {
   keys[e.key] = true;
   
   if (e.key === 'l' || e.key === 'L') {
     ILLUMINATION = !ILLUMINATION;
-    document.getElementById('lightStatus').textContent = ILLUMINATION ? 'ON' : 'OFF';
     console.log('Iluminación:', ILLUMINATION ? 'ACTIVADA' : 'DESACTIVADA');
   }
 });
-window.addEventListener('keyup', e => keys[e.key] = false);
-// ======= Configuración =======
 
+window.addEventListener('keyup', e => keys[e.key] = false);
+
+// ====== Controles táctiles ======
+function setupTouchControls() {
+  const btnUp = document.getElementById('btn-up');
+  const btnDown = document.getElementById('btn-down');
+  const btnLeft = document.getElementById('btn-left');
+  const btnRight = document.getElementById('btn-right');
+  const btnAction = document.getElementById('btn-action');
+  
+  // Mapeo de botones a teclas
+  const buttonKeyMap = {
+    'btn-up': 'ArrowUp',
+    'btn-down': 'ArrowDown',
+    'btn-left': 'ArrowLeft',
+    'btn-right': 'ArrowRight',
+    'btn-action': ' ' // Espacio para acción
+  };
+  
+  // Función para manejar inicio de toque
+  function handleTouchStart(e, buttonId) {
+    e.preventDefault();
+    const key = buttonKeyMap[buttonId];
+    keys[key] = true;
+  }
+  
+  // Función para manejar fin de toque
+  function handleTouchEnd(e, buttonId) {
+    e.preventDefault();
+    const key = buttonKeyMap[buttonId];
+    keys[key] = false;
+  }
+  
+  // Asignar eventos a cada botón
+  [btnUp, btnDown, btnLeft, btnRight, btnAction].forEach(btn => {
+    btn.addEventListener('touchstart', (e) => handleTouchStart(e, btn.id));
+    btn.addEventListener('touchend', (e) => handleTouchEnd(e, btn.id));
+    btn.addEventListener('touchcancel', (e) => handleTouchEnd(e, btn.id));
+    
+    // También soportar mouse para testing en desktop
+    btn.addEventListener('mousedown', (e) => handleTouchStart(e, btn.id));
+    btn.addEventListener('mouseup', (e) => handleTouchEnd(e, btn.id));
+    btn.addEventListener('mouseleave', (e) => handleTouchEnd(e, btn.id));
+  });
+}
+
+// Inicializar controles táctiles
+setupTouchControls();
+
+// ======= Configuración =======
 let MAX_RENDER_DISTANCE = 50;
 let FRUSTUM_MARGIN = 0.4;
 
@@ -60,131 +230,114 @@ const block_tiles_set = new Set(block_tiles);
 const tile_heights = {
   5: 4,
   7: 8,
-  8:10,
-  6:10
-
+  8: 10,
+  6: 10
 };
+
 const TILE_SIZE = 32;
 const MAP_WIDTH = 100;
 const MAP_HEIGHT = 100;
 </script>
+
 <script src="image64.js"></script>
 <script src="test48.js"></script>
 <script src="collision.js"></script>
 <script src="glitter7engine.js"></script>
 <script src="camera.js"></script>
 <script src="player.js"></script>
-<script>
- //recursos
- tileMap = TileMaps["test48"].layers[0].data
+<script src="controls.js"></script>
 
-    // Crear el motor
+<script>
+// Recursos
+tileMap = TileMaps["test48"].layers[0].data
+
+// Crear el motor
 const canvas = document.getElementById('glCanvas');
 const engine = new Glitter7engine(canvas, {
-
-  //obligatorio:
-  map :{
-  array: tileMap,
-  mapWidth: 100,
-  mapHeight: 100,
+  map: {
+    array: tileMap,
+    mapWidth: 100,
+    mapHeight: 100,
   },
-  tileSize:32,
+  tileSize: 32,
   maxRenderDistance: 100,
   
   billboardTiles: [4, 3, 9, 10, 11],
   blockTiles: [5, 6, 7, 8],
   tileHeights: { 5: 4, 7: 8, 8: 10, 6: 10 },
-  light:{
+  
+  light: {
     illumination: true,
     ambientLight: 0.5,
     lightDiffuse: 0.7,
     lightDir: [0.3, 0.7, 0.5]
   },
-  skydome:{
-    enabled:true,
-    radius:100,
-    segments:12,
-    rep_h:1,
-    rep_v:7
+  
+  skydome: {
+    enabled: true,
+    radius: 100,
+    segments: 12,
+    rep_h: 1,
+    rep_v: 7
   },
-  fog:{
-    enabled:true,
-    start:60,
-    end:100,
+  
+  fog: {
+    enabled: true,
+    start: 60,
+    end: 100,
     color: [0.5, 0.5, 0.5]
-  }
+  },
 
+  defaultBillboardGround: 1,
+  billboardGroundTiles: {3: 4}
 });
+
 // Cargar recursos
-
-
-//para desplegar en local, se puede pasar directamente el base 64 a loadSkydome y loadspritesheet
 imageToBase64("img/img_cielo.png", (img) => engine.loadSkydomeTexture(img))
 imageToBase64("img/tilesheet.png", (img) => engine.loadSpritesheet(img))
-/*
-let img_cielo = canvas.toDataURL("img/img_cielo.png");
-async function init() {
-  await engine.loadSkydomeTexture(img_cielo);
-  console.log('Skydome cargado');
-}
-*/
 
-
-//engine.loadSkydomeTexture(img_cielo);
-//engine.setTileMap(tileMap);
-// Configurar cámara
-/*const camera = {
-x: 24.0,
-y: 24.0,
-z: 1.0,
-angle: 3.0
-};*/
-let playerObject = { tile: 11, x: 10.5, y: 0.5, z: 0.0 };
 // Objetos independientes
+let playerObject = { tile: 11, x: 10.5, y: 0.5, z: 0.0 };
 const independentObjects = [
-playerObject,
-{ tile: 11, x: 10.5, y: 0.5, z: 0.0 },
-{ tile: 7, x: 15.0, y: 15.0, z: 0.0 },
-{ tile: 4, x: 20.5, y: 20.5, z: 0.0 },
-{ tile: 8, x: 25.0, y: 12.0, z: 0.0 }
+  playerObject,
+  { tile: 11, x: 10.5, y: 0.5, z: 0.0 },
+  { tile: 7, x: 15.0, y: 15.0, z: 0.0 },
+  { tile: 4, x: 20.5, y: 20.5, z: 0.0 },
+  { tile: 8, x: 25.0, y: 12.0, z: 0.0 }
 ];
+
 const player = initPlayer(playerObject, tileMap, independentObjects);
 applyMovementPreset('REALISTIC');
 
 // Loop de render
 function gameLoop() {
-  // Actualizar cámara aquí
-  // Renderizar
   engine.render(independentObjects, true);
   updatePlayer(player, keys);
   updateCamera();
   requestAnimationFrame(gameLoop);
 }
+
 gameLoop();
 
 function updateCamera() {
   updatePlayerCamera(engine.camera, player);
 }
 
-//función auxiliar para pasar a base64 las imagenes
+// Función auxiliar para pasar a base64 las imágenes
 function imageToBase64(url, callback) {
-    const img = new Image();
-    img.crossOrigin = "Anonymous"; // necesario si la imagen está en otro dominio
-    img.onload = function() {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0);
-        const base64 = canvas.toDataURL("image/png");
-        callback(base64);
-    };
-    img.src = url;
+  const img = new Image();
+  img.crossOrigin = "Anonymous";
+  img.onload = function() {
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const base64 = canvas.toDataURL("image/png");
+    callback(base64);
+  };
+  img.src = url;
 }
-
-
-
-
 </script>
 </body>
 </html>
