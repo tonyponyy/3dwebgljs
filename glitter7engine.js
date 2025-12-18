@@ -42,6 +42,10 @@ class Glitter7engine {
     this.tile_heights = config.tileHeights || {};
     this.DEFAULT_BILLBOARD_GROUND = config.defaultBillboardGround || DEFAULT_BILLBOARD_GROUND_DEFAULT;
     this.billboard_ground_tiles = config.billboardGroundTiles || {};
+    // Billboards rotables y escalas
+    this.rotatable_billboards = config.rotatableBillboards || [];
+    this.rotatable_billboards_set = new Set(this.rotatable_billboards);
+    this.billboard_scales = config.billboardScales || {}; // {tile: scale}
 
     
     // Iluminación
@@ -350,18 +354,19 @@ getSkydomeFS() {
 }
 
   
-  getBillboardVS() {
-    return `#version 300 es
-    in vec2 a_offset;
-    uniform vec2 u_screenPos;
-    uniform float u_size;
-    out vec2 v_texCoord;
-    void main() {
-      vec2 pos = u_screenPos + vec2(a_offset.x, a_offset.y + 1.0) * u_size;
-      gl_Position = vec4(pos * 2.0 - 1.0, 0.0, 1.0);
-      v_texCoord = (a_offset + 1.0) * 0.5;
-    }`;
-  }
+getBillboardVS() {
+  return `#version 300 es
+  in vec2 a_offset;
+  uniform vec2 u_screenPos;
+  uniform float u_size;
+  uniform float u_scale;
+  out vec2 v_texCoord;
+  void main() {
+    vec2 pos = u_screenPos + vec2(a_offset.x, a_offset.y + 1.0) * u_size * u_scale;
+    gl_Position = vec4(pos * 2.0 - 1.0, 0.0, 1.0);
+    v_texCoord = (a_offset + 1.0) * 0.5;
+  }`;
+}
   
   getBillboardFS() {
   return `#version 300 es
@@ -649,6 +654,7 @@ createSkydomeGeometry() {
     billboard: {
       screenPos: this.gl.getUniformLocation(this.billboardProgram, 'u_screenPos'),
       size: this.gl.getUniformLocation(this.billboardProgram, 'u_size'),
+        scale: this.gl.getUniformLocation(this.billboardProgram, 'u_scale'),
       spriteIndex: this.gl.getUniformLocation(this.billboardProgram, 'u_spriteIndex'),
       spriteCount: this.gl.getUniformLocation(this.billboardProgram, 'u_spriteCount'),
       spritesheet: this.gl.getUniformLocation(this.billboardProgram, 'u_spritesheet'),
@@ -837,6 +843,50 @@ updateTileMapTexture() {
   isBlock(n) {
     return this.block_tiles_set.has(n);
   }
+  isRotatableBillboard(n) {
+  return this.rotatable_billboards_set.has(n);
+}
+
+getRotatedBillboardSprite(baseTile, cameraAngle, billboardX, billboardY, fixedOrientation = null) {
+  let relativeAngle;
+  let needsMapping = false;
+  
+  if (fixedOrientation !== null) {
+    // Usar la orientación fija del billboard
+    // El billboard "mira" en la dirección fixedOrientation
+    // Calculamos el ángulo relativo a la cámara
+    relativeAngle = fixedOrientation - cameraAngle;
+  } else {
+    // El billboard siempre mira hacia la cámara (comportamiento automático)
+    // Calculamos desde dónde viene la cámara respecto al billboard
+    const dx = this.lastCamera.x - billboardX;
+    const dy = this.lastCamera.y - billboardY;
+    const angleFromBillboardToCamera = Math.atan2(dy, dx);
+    relativeAngle = angleFromBillboardToCamera;
+    needsMapping = true; // Solo los billboards automáticos necesitan el mapeo invertido
+  }
+  
+  // Normalizar el ángulo relativo (0 a 2π)
+  while (relativeAngle < 0) relativeAngle += Math.PI * 2;
+  while (relativeAngle >= Math.PI * 2) relativeAngle -= Math.PI * 2;
+  
+  // Dividir en 4 cuadrantes (cada uno de 90 grados = π/2)
+  const quadrant = Math.floor((relativeAngle + Math.PI / 4) / (Math.PI / 2)) % 4;
+  
+  let spriteOffset;
+  if (needsMapping) {
+    // Para billboards automáticos (del tilemap), invertir izquierda/derecha
+    // Asumiendo que tus sprites están ordenados: frente, derecha, atrás, izquierda
+    const spriteMap = [0, 3, 2, 1];
+    spriteOffset = spriteMap[quadrant];
+  } else {
+    // Para billboards con orientación fija, usar directamente el cuadrante
+    spriteOffset = quadrant;
+  }
+  
+  // Retornar el tile base + offset del sprite correcto
+  return baseTile + spriteOffset;
+}
   
   // Recolectar objetos renderizables
   collectRenderableObjects(camera, independentObjects = []) {
@@ -861,18 +911,39 @@ updateTileMapTexture() {
         const dy = worldY - camY;
         const distSq = dx * dx + dy * dy;
         
-        if (this.isBillboard(tile)) {
-          const proj = this.projectToScreen(worldX, worldY, camera);
-          if (proj.visible) {
-            this.tempObjects[this.objectCount++] = {
-              type: 'billboard',
-              x: worldX,
-              y: worldY,
-              tile,
-              dist: distSq,
-              proj
-            };
-          }
+if (this.isBillboard(tile)) {
+  // Obtener elevación del suelo
+  const groundElevation = this.heightMap ? (this.heightMap[i] || 0.0) : 0.0;
+  
+  // Calcular altura del bloque base si existe
+  const groundTile = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
+  const blockHeight = this.isBlock(groundTile) ? (this.tile_heights[groundTile] || 0.0) : 0.0;
+  
+  // Altura total = elevación del suelo + altura del bloque base
+  const totalHeight = groundElevation + blockHeight;
+  
+  const proj = this.projectToScreenWithHeight(worldX, worldY, totalHeight, camera);
+  if (proj.visible) {
+    // Calcular sprite rotado si aplica
+    let finalTile = tile;
+    if (this.isRotatableBillboard(tile)) {
+      finalTile = this.getRotatedBillboardSprite(tile, camera.angle, worldX, worldY, null);
+    }
+    
+    // Obtener escala (global por tile o 1.0 por defecto)
+    const scale = this.billboard_scales[tile] || 1.0;
+    
+    this.tempObjects[this.objectCount++] = {
+      type: 'billboard',
+      x: worldX,
+      y: worldY,
+      tile: finalTile,
+      dist: distSq,
+      proj,
+      scale: scale
+    };
+  }
+
         } else if (this.isBlock(tile)) {
           this.tempObjects[this.objectCount++] = {
             type: 'block',
@@ -898,18 +969,30 @@ updateTileMapTexture() {
       const dy = worldY - camY;
       const distSq = dx * dx + dy * dy;
       
-      if (this.isBillboard(obj.tile)) {
-        const proj = this.projectToScreenWithHeight(worldX, worldY, height, camera);
-        if (proj.visible) {
-          this.tempObjects[this.objectCount++] = {
-            type: 'billboard',
-            x: worldX,
-            y: worldY,
-            tile: obj.tile,
-            dist: distSq,
-            proj
-          };
-        }
+if (this.isBillboard(obj.tile)) {
+  const proj = this.projectToScreenWithHeight(worldX, worldY, height, camera);
+  if (proj.visible) {
+    // Calcular sprite rotado si aplica
+    let finalTile = obj.tile;
+    if (this.isRotatableBillboard(obj.tile)) {
+      const fixedAngle = obj.orientation !== undefined ? obj.orientation : null;
+      finalTile = this.getRotatedBillboardSprite(obj.tile, camera.angle, worldX, worldY, fixedAngle);
+    }
+    
+    // Obtener escala (del objeto, global por tile, o 1.0 por defecto)
+    const scale = obj.scale !== undefined ? obj.scale : (this.billboard_scales[obj.tile] || 1.0);
+    
+    this.tempObjects[this.objectCount++] = {
+      type: 'billboard',
+      x: worldX,
+      y: worldY,
+      tile: finalTile,
+      dist: distSq,
+      proj,
+      scale: scale
+    };
+  }
+
       } else if (this.isBlock(obj.tile)) {
         this.tempObjects[this.objectCount++] = {
           type: 'block',
@@ -1044,6 +1127,7 @@ createProjectionMatrix() {
     
     this.gl.uniform2f(this.uniformLocations.billboard.screenPos, billboard.proj.x, billboard.proj.y);
     this.gl.uniform1f(this.uniformLocations.billboard.size, billboard.proj.size);
+   this.gl.uniform1f(this.uniformLocations.billboard.scale, billboard.scale || 1.0);
     this.gl.uniform1i(this.uniformLocations.billboard.spriteIndex, billboard.tile);
     this.gl.uniform1f(this.uniformLocations.billboard.spriteCount, this.tile_items_size);
     //niebla

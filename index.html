@@ -222,7 +222,7 @@ setupTouchControls();
 let MAX_RENDER_DISTANCE = 50;
 let FRUSTUM_MARGIN = 0.4;
 
-let billboard_tiles = [9,10,11,12,13,14];
+let billboard_tiles = [9,10,11,12,13,14,15];
 let block_tiles = [2,4,5,7, 8];
 const billboard_tiles_set = new Set(billboard_tiles);
 const block_tiles_set = new Set(block_tiles);
@@ -287,7 +287,10 @@ const engine = new Glitter7engine(canvas, {
     end: 100,
     //color: [0.5, 0.5, 0.5]
   },
-
+ rotatableBillboards: [15],
+   billboardScales: {
+    9: 8.0,   // Todos los árboles (tile 4) son el doble de grandes
+  },
   defaultBillboardGround: 3,
   //billboardGroundTiles: {3: 4}
 });
@@ -303,7 +306,13 @@ const independentObjects = [
   { tile: 11, x: 10.5, y: 0.5, z: 0.0 },
   { tile: 7, x: 15.0, y: 15.0, z: 0.0 },
   { tile: 4, x: 20.5, y: 20.5, z: 0.0 },
-  { tile: 8, x: 25.0, y: 12.0, z: 0.0 }
+  { tile: 8, x: 25.0, y: 12.0, z: 0.0 },
+   { 
+    x: 5.5, y: 5.5, z: 0, 
+    tile: 15,                    // Árbol rotable
+    orientation: Math.PI/2,     // Mira al Este
+    //scale: 3.0                  // Triple de tamaño (override de billboardScales)
+  }
 ];
 
 const player = initPlayer(playerObject, tileMap, independentObjects);
