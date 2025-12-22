@@ -222,29 +222,30 @@ setupTouchControls();
 let MAX_RENDER_DISTANCE = 50;
 let FRUSTUM_MARGIN = 0.4;
 
-let billboard_tiles = [30,31,32,33,34,39];
-let block_tiles = [35,36,37,38];
+let billboard_tiles = [9,10,11,12,13,14,15,33,34];
+let block_tiles = [2,4,5,7, 8];
 const billboard_tiles_set = new Set(billboard_tiles);
 const block_tiles_set = new Set(block_tiles);
 
-let tile_heights = {36:3,37:5 };
+let tile_heights = {
+   2:2,4: 3, 5: 5, 7: 4, 8: 5 };
 
-const TILE_SIZE = 48;
+const TILE_SIZE = 32;
 const MAP_WIDTH = 200;
 const MAP_HEIGHT = 200;
 </script>
 
 <script src="image64.js"></script>
-<script src="isla.js"></script>
+<script src="lavamap.js"></script>
 <script src="collision.js"></script>
 <script src="glitter7engine.js"></script>
 <script src="camera.js"></script>
-<script src="player2.js"></script>
+<script src="player.js"></script>
 <script src="controls.js"></script>
 
 <script>
 // Recursos
-tileMap = TileMaps["isla"].layers[0].data
+tileMap = TileMaps["lavamap"].layers[0].data
 
 // Crear el motor
 const canvas = document.getElementById('glCanvas');
@@ -254,7 +255,7 @@ const engine = new Glitter7engine(canvas, {
     mapWidth: 200,
     mapHeight: 200,
   },
-  tileSize: 48,
+  tileSize: 32,
   maxRenderDistance: 100,
   
   billboardTiles: billboard_tiles,
@@ -269,15 +270,15 @@ const engine = new Glitter7engine(canvas, {
   },
   
   skydome: {
-    enabled: false,
+    enabled: true,
     radius: 100,
     segments: 12,
     rep_h: 4,
     rep_v: 10
   },
   background:{
-    color1:[0,0.3,0.8],
-    color2:[0,0.7,0.7]
+    color1:[1,0.3,0],
+    color2:[1,0.7,0]
   },
   
   fog: {
@@ -286,27 +287,36 @@ const engine = new Glitter7engine(canvas, {
     end: 100,
     //color: [0.5, 0.5, 0.5]
   },
- rotatableBillboards: [39],
+ rotatableBillboards: [15],
    billboardScales: {
-    39: 2.0,   // Todos los árboles (tile 4) son el doble de grandes
+    9: 8.0,   // Todos los árboles (tile 4) son el doble de grandes
   },
-  defaultBillboardGround: 2,
-  billboardGroundTiles: {39: 1}
+  defaultBillboardGround: 3,
+  //billboardGroundTiles: {3: 4}
 });
 
 // Cargar recursos
-//imageToBase64("img/img_cielo.png", (img) => engine.loadSkydomeTexture(img))
-imageToBase64("img/carretera1.png", (img) => engine.loadSpritesheet(img))
+imageToBase64("img/img_cielo.png", (img) => engine.loadSkydomeTexture(img))
+imageToBase64("img/tilesheet2.png", (img) => engine.loadSpritesheet(img))
 
 // Objetos independientes
-let playerObject = { tile: 39, x: 85, y: 182, z: 0.0,scale:0.5,orientation:180 };
+let playerObject = { tile: 11, x: 10.5, y: 0.5, z: 0.0 };
 const independentObjects = [
-  playerObject         // Triple de tamaño (override de billboardScales)
-  
+  playerObject,
+  { tile: 11, x: 10.5, y: 0.5, z: 0.0 },
+  { tile: 7, x: 15.0, y: 15.0, z: 0.0 },
+  { tile: 4, x: 20.5, y: 20.5, z: 0.0 },
+  { tile: 8, x: 25.0, y: 12.0, z: 0.0 },
+   { 
+    x: 5.5, y: 5.5, z: 0, 
+    tile: 15,                    // Árbol rotable
+    orientation: Math.PI/2,     // Mira al Este
+    //scale: 3.0                  // Triple de tamaño (override de billboardScales)
+  }
 ];
 
 const player = initPlayer(playerObject, tileMap, independentObjects);
-//applyMovementPreset('REALISTIC');
+applyMovementPreset('REALISTIC');
 
 // Loop de render
 function gameLoop() {

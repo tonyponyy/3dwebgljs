@@ -3,7 +3,7 @@
 const CAMERA_CONFIG = {
   DISTANCE: 5.0,      // Distancia detrás del jugador
   HEIGHT: 3.0,        // Altura sobre el jugador
-  SMOOTHNESS: 0.15,   // Suavidad del seguimiento (0-1, menor = más suave)
+  SMOOTHNESS: 0.25,   // Suavidad del seguimiento (0-1, menor = más suave)
   LOOK_AHEAD: 1.0     // Cuánto mira hacia adelante
 };
 

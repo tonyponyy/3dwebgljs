@@ -3,7 +3,7 @@
 const COLLISION_CONFIG = {
   PLAYER_RADIUS: 0.3,
   STEP_HEIGHT: 0.5,  // Altura máxima que puede subir sin saltar
-  GROUND_CHECK_DISTANCE: 0.1
+  GROUND_CHECK_DISTANCE: 1
 };
 
 /**

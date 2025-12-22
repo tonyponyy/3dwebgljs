@@ -363,6 +363,7 @@ getBillboardVS() {
   out vec2 v_texCoord;
   void main() {
     vec2 pos = u_screenPos + vec2(a_offset.x, a_offset.y + 1.0) * u_size * u_scale;
+    //vec2 pos = u_screenPos + vec2(a_offset.x, -(a_offset.y + 1.0)) * u_size * u_scale;
     gl_Position = vec4(pos * 2.0 - 1.0, 0.0, 1.0);
     v_texCoord = (a_offset + 1.0) * 0.5;
   }`;
@@ -384,6 +385,7 @@ getBillboardVS() {
   
   void main() {
     vec2 uv = v_texCoord;
+      uv.y = 1.0 - uv.y;  // ← AÑADIR ESTA LÍNEA
     uv.x /= u_spriteCount;
     uv.x += float(u_spriteIndex - 1) / u_spriteCount;
     vec4 color = texture(u_spritesheet, uv);
@@ -715,7 +717,7 @@ createSkydomeGeometry() {
       
       image.onload = () => {
         this.tile_items_size = Math.floor(image.width / this.TILE_SIZE);
-        this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
+        this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
         this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
