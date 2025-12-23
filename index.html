@@ -245,7 +245,7 @@ const MAP_HEIGHT = 200;
 <script>
 // Recursos
 tileMap = TileMaps["isla"].layers[0].data
-
+  const ei = TileMaps["isla"].layers[1].data.map(v => v > 47 ? v - 47 : v);
 // Crear el motor
 const canvas = document.getElementById('glCanvas');
 const engine = new Glitter7engine(canvas, {
@@ -256,6 +256,10 @@ const engine = new Glitter7engine(canvas, {
   },
   tileSize: 48,
   maxRenderDistance: 100,
+heightMap: ei
+
+  ,
+
   
   billboardTiles: billboard_tiles,
   blockTiles: block_tiles,

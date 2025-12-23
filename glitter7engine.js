@@ -33,6 +33,7 @@ class Glitter7engine {
     this.MAP_WIDTH = config.map.mapWidth ;
     this.MAP_HEIGHT = config.map.mapHeight ;
     this.RENDER_SCALE = this.transformNumber((config.renderScale || 1.0));
+
     
     // Tiles
     this.billboard_tiles = config.billboardTiles || [];
@@ -40,6 +41,7 @@ class Glitter7engine {
     this.billboard_tiles_set = new Set(this.billboard_tiles);
     this.block_tiles_set = new Set(this.block_tiles);
     this.tile_heights = config.tileHeights || {};
+    this.heightMap = config.heightMap || null;
     this.DEFAULT_BILLBOARD_GROUND = config.defaultBillboardGround || DEFAULT_BILLBOARD_GROUND_DEFAULT;
     this.billboard_ground_tiles = config.billboardGroundTiles || {};
     // Billboards rotables y escalas
@@ -756,16 +758,31 @@ updateTileMapTexture() {
   if (!this.tileMap) return;
   
   const data = new Uint8Array(this.MAP_WIDTH * this.MAP_HEIGHT);
-  for (let i = 0; i < this.tileMap.length; i++) {
-    const tile = this.tileMap[i];
-    
-    // Si es un billboard, poner el tile de suelo correspondiente
-    if (this.isBillboard(tile)) {
+for (let i = 0; i < this.tileMap.length; i++) {
+  const tile = this.tileMap[i];
+  const heightMapValue = this.heightMap ? (this.heightMap[i] || 0.0) : 0.0;
+  
+  // Si es un billboard, poner el tile de suelo correspondiente
+  if (this.isBillboard(tile)) {
+    // Si hay altura, no renderizar suelo (se renderiza como bloque)
+    if (heightMapValue > 0) {
+      data[i] = 0; // Transparente
+    } else {
       data[i] = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
+    }
+  } else if (this.isBlock(tile)) {
+    // Los bloques no se renderizan en el suelo
+    data[i] = 0;
+  } else {
+    // Tile de suelo normal
+    // Si tiene altura en heightMap, no renderizar en suelo (se convierte en bloque)
+    if (heightMapValue > 0) {
+      data[i] = 0;
     } else {
       data[i] = tile;
     }
   }
+}
   
   this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
   this.gl.bindTexture(this.gl.TEXTURE_2D, this.tileMapTexture);
@@ -892,78 +909,20 @@ getRotatedBillboardSprite(baseTile, cameraAngle, billboardX, billboardY, fixedOr
   
   // Recolectar objetos renderizables
   collectRenderableObjects(camera, independentObjects = []) {
-    this.objectCount = 0;
-    const camX = camera.x;
-    const camY = camera.y;
-    
-    // Objetos del tilemap
-    if (this.tileMap) {
-      for (let i = 0; i < this.tileMap.length; i++) {
-        const tile = this.tileMap[i];
-        if (tile === 0) continue;
-        
-        const mapX = i % this.MAP_WIDTH;
-        const mapY = Math.floor(i / this.MAP_WIDTH);
-        const worldX = mapX + 0.5;
-        const worldY = mapY + 0.5;
-        
-        if (!this.isInFrustum(worldX, worldY, camera)) continue;
-        
-        const dx = worldX - camX;
-        const dy = worldY - camY;
-        const distSq = dx * dx + dy * dy;
-        
-if (this.isBillboard(tile)) {
-  // Obtener elevación del suelo
-  const groundElevation = this.heightMap ? (this.heightMap[i] || 0.0) : 0.0;
+  this.objectCount = 0;
+  const camX = camera.x;
+  const camY = camera.y;
   
-  // Calcular altura del bloque base si existe
-  const groundTile = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
-  const blockHeight = this.isBlock(groundTile) ? (this.tile_heights[groundTile] || 0.0) : 0.0;
-  
-  // Altura total = elevación del suelo + altura del bloque base
-  const totalHeight = groundElevation + blockHeight;
-  
-  const proj = this.projectToScreenWithHeight(worldX, worldY, totalHeight, camera);
-  if (proj.visible) {
-    // Calcular sprite rotado si aplica
-    let finalTile = tile;
-    if (this.isRotatableBillboard(tile)) {
-      finalTile = this.getRotatedBillboardSprite(tile, camera.angle, worldX, worldY, null);
-    }
-    
-    // Obtener escala (global por tile o 1.0 por defecto)
-    const scale = this.billboard_scales[tile] || 1.0;
-    
-    this.tempObjects[this.objectCount++] = {
-      type: 'billboard',
-      x: worldX,
-      y: worldY,
-      tile: finalTile,
-      dist: distSq,
-      proj,
-      scale: scale
-    };
-  }
-
-        } else if (this.isBlock(tile)) {
-          this.tempObjects[this.objectCount++] = {
-            type: 'block',
-            x: worldX,
-            y: 0.0,
-            z: worldY,
-            tile,
-            dist: distSq
-          };
-        }
-      }
-    }
-    
-    // Objetos independientes
-    for (const obj of independentObjects) {
-      const worldX = obj.x;
-      const worldY = obj.y;
-      const height = obj.z;
+  // Objetos del tilemap
+  if (this.tileMap) {
+    for (let i = 0; i < this.tileMap.length; i++) {
+      const tile = this.tileMap[i];
+      if (tile === 0) continue;
+      
+      const mapX = i % this.MAP_WIDTH;
+      const mapY = Math.floor(i / this.MAP_WIDTH);
+      const worldX = mapX + 0.5;
+      const worldY = mapY + 0.5;
       
       if (!this.isInFrustum(worldX, worldY, camera)) continue;
       
@@ -971,46 +930,136 @@ if (this.isBillboard(tile)) {
       const dy = worldY - camY;
       const distSq = dx * dx + dy * dy;
       
-if (this.isBillboard(obj.tile)) {
-  const proj = this.projectToScreenWithHeight(worldX, worldY, height, camera);
-  if (proj.visible) {
-    // Calcular sprite rotado si aplica
-    let finalTile = obj.tile;
-    if (this.isRotatableBillboard(obj.tile)) {
-      const fixedAngle = obj.orientation !== undefined ? obj.orientation : null;
-      finalTile = this.getRotatedBillboardSprite(obj.tile, camera.angle, worldX, worldY, fixedAngle);
-    }
-    
-    // Obtener escala (del objeto, global por tile, o 1.0 por defecto)
-    const scale = obj.scale !== undefined ? obj.scale : (this.billboard_scales[obj.tile] || 1.0);
-    
-    this.tempObjects[this.objectCount++] = {
-      type: 'billboard',
-      x: worldX,
-      y: worldY,
-      tile: finalTile,
-      dist: distSq,
-      proj,
-      scale: scale
-    };
-  }
-
-      } else if (this.isBlock(obj.tile)) {
+      // Obtener altura del heightMap
+      const heightMapValue = this.heightMap ? (this.heightMap[i] || 0.0) : 0.0;
+      
+      if (this.isBillboard(tile)) {
+        // Obtener elevación del suelo
+        const groundElevation = heightMapValue;
+        
+        // Calcular altura del bloque base si existe
+        const groundTile = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
+        const blockHeight = this.isBlock(groundTile) ? (this.tile_heights[groundTile] || 0.0) : 0.0;
+        
+        // Altura total = elevación del suelo + altura del bloque base
+        const totalHeight = groundElevation + blockHeight;
+        
+        // Si hay elevación del suelo, crear bloque base
+        if (groundElevation > 0) {
+          this.tempObjects[this.objectCount++] = {
+            type: 'block',
+            x: worldX,
+            y: 0.0,
+            z: worldY,
+            tile: groundTile,
+            dist: distSq,
+            customHeight: groundElevation
+          };
+        }
+        
+        // Renderizar billboard encima
+        const proj = this.projectToScreenWithHeight(worldX, worldY, totalHeight, camera);
+        if (proj.visible) {
+          let finalTile = tile;
+          if (this.isRotatableBillboard(tile)) {
+            finalTile = this.getRotatedBillboardSprite(tile, camera.angle, worldX, worldY, null);
+          }
+          
+          const scale = this.billboard_scales[tile] || 1.0;
+          
+          this.tempObjects[this.objectCount++] = {
+            type: 'billboard',
+            x: worldX,
+            y: worldY,
+            tile: finalTile,
+            dist: distSq,
+            proj,
+            scale: scale
+          };
+        }
+        
+      } else if (this.isBlock(tile)) {
+        // Bloque normal: usar heightMap si existe y es > 0, sino usar tile_heights
+        const customHeight = (heightMapValue > 0) ? heightMapValue : null;
+        
         this.tempObjects[this.objectCount++] = {
           type: 'block',
           x: worldX,
-          y: height,
+          y: 0.0,
           z: worldY,
-          tile: obj.tile,
-          dist: distSq
+          tile,
+          dist: distSq,
+          customHeight: customHeight
         };
+        
+      } else {
+        // Tile de suelo - si tiene altura en heightMap, convertirlo en bloque
+        if (heightMapValue > 0) {
+          this.tempObjects[this.objectCount++] = {
+            type: 'block',
+            x: worldX,
+            y: 0.0,
+            z: worldY,
+            tile: tile,
+            dist: distSq,
+            customHeight: heightMapValue
+          };
+        }
       }
     }
-    
-    const objects = this.tempObjects.slice(0, this.objectCount);
-    objects.sort((a, b) => b.dist - a.dist);
-    return objects;
   }
+  
+  // Objetos independientes
+  for (const obj of independentObjects) {
+    const worldX = obj.x;
+    const worldY = obj.y;
+    const height = obj.z;
+    
+    if (!this.isInFrustum(worldX, worldY, camera)) continue;
+    
+    const dx = worldX - camX;
+    const dy = worldY - camY;
+    const distSq = dx * dx + dy * dy;
+    
+    if (this.isBillboard(obj.tile)) {
+      const proj = this.projectToScreenWithHeight(worldX, worldY, height, camera);
+      if (proj.visible) {
+        // Calcular sprite rotado si aplica
+        let finalTile = obj.tile;
+        if (this.isRotatableBillboard(obj.tile)) {
+          const fixedAngle = obj.orientation !== undefined ? obj.orientation : null;
+          finalTile = this.getRotatedBillboardSprite(obj.tile, camera.angle, worldX, worldY, fixedAngle);
+        }
+        
+        // Obtener escala (del objeto, global por tile, o 1.0 por defecto)
+        const scale = obj.scale !== undefined ? obj.scale : (this.billboard_scales[obj.tile] || 1.0);
+        
+        this.tempObjects[this.objectCount++] = {
+          type: 'billboard',
+          x: worldX,
+          y: worldY,
+          tile: finalTile,
+          dist: distSq,
+          proj,
+          scale: scale
+        };
+      }
+    } else if (this.isBlock(obj.tile)) {
+      this.tempObjects[this.objectCount++] = {
+        type: 'block',
+        x: worldX,
+        y: height,
+        z: worldY,
+        tile: obj.tile,
+        dist: distSq
+      };
+    }
+  }
+  
+  const objects = this.tempObjects.slice(0, this.objectCount);
+  objects.sort((a, b) => b.dist - a.dist);
+  return objects;
+}
   
   // Renderizar cielo
   renderSky() {
@@ -1162,68 +1211,74 @@ createProjectionMatrix() {
   }
   
   // Renderizar bloques instanciados
-  drawBlocksInstanced(tileType, instances, camera) {
-    if (!instances || instances.length === 0) return;
+// Renderizar bloques instanciados
+drawBlocksInstanced(tileType, instances, camera) {
+  if (!instances || instances.length === 0) return;
+  
+  this.gl.useProgram(this.blockProgram);
+  
+  // Usar altura por defecto del tile
+  const defaultHeight = this.tile_heights[tileType] || 1.0;
+  
+  const instanceData = new Float32Array(instances.length * 4);
+  for (let i = 0; i < instances.length; i++) {
+    // Usar customHeight individual de cada instancia, o el valor por defecto
+    const height = instances[i].customHeight !== undefined && instances[i].customHeight !== null 
+      ? instances[i].customHeight 
+      : defaultHeight;
     
-    this.gl.useProgram(this.blockProgram);
-    
-    const height = this.tile_heights[tileType] || 1;
-    
-    const instanceData = new Float32Array(instances.length * 4);
-    for (let i = 0; i < instances.length; i++) {
-      instanceData[i * 4 + 0] = instances[i].x;
-      instanceData[i * 4 + 1] = instances[i].y;
-      instanceData[i * 4 + 2] = instances[i].z;
-      instanceData[i * 4 + 3] = height;
-    }
-    
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.instanceBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, instanceData, this.gl.DYNAMIC_DRAW);
-    
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.cubeBuffer);
-    
-    this.gl.enableVertexAttribArray(this.attribLocations.block.position);
-    this.gl.vertexAttribPointer(this.attribLocations.block.position, 3, this.gl.FLOAT, false, 32, 0);
-    
-    this.gl.enableVertexAttribArray(this.attribLocations.block.texCoord);
-    this.gl.vertexAttribPointer(this.attribLocations.block.texCoord, 2, this.gl.FLOAT, false, 32, 12);
-    
-    this.gl.enableVertexAttribArray(this.attribLocations.block.normal);
-    this.gl.vertexAttribPointer(this.attribLocations.block.normal, 3, this.gl.FLOAT, false, 32, 20);
-    
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.instanceBuffer);
-    this.gl.enableVertexAttribArray(this.attribLocations.block.instanceData);
-    this.gl.vertexAttribPointer(this.attribLocations.block.instanceData, 4, this.gl.FLOAT, false, 16, 0);
-    this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 1);
-    
-    this.gl.uniform4f(this.uniformLocations.block.camera, camera.x, camera.y, camera.z, camera.angle);
-    this.gl.uniform2f(this.uniformLocations.block.resolution, this.canvas.width, this.canvas.height);
-    this.gl.uniform1i(this.uniformLocations.block.spriteIndex, tileType);
-    this.gl.uniform1f(this.uniformLocations.block.spriteCount, this.tile_items_size);
-    
-    this.gl.uniform1i(this.uniformLocations.block.illumination, this.ILLUMINATION);
-    this.gl.uniform1f(this.uniformLocations.block.ambient, this.AMBIENT_LIGHT);
-    this.gl.uniform1f(this.uniformLocations.block.diffuse, this.LIGHT_DIFFUSE);
-    
-    const len = Math.sqrt(this.lightDir[0]*this.lightDir[0] + this.lightDir[1]*this.lightDir[1] + this.lightDir[2]*this.lightDir[2]);
-    this.gl.uniform3f(this.uniformLocations.block.lightDir, this.lightDir[0]/len, this.lightDir[1]/len, this.lightDir[2]/len);
-    
-    this.gl.activeTexture(this.gl.TEXTURE0);
-    this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
-    this.gl.uniform1i(this.uniformLocations.block.spritesheet, 0);
-
-      // Añadir uniforms de niebla antes del drawArraysInstanced:
+    instanceData[i * 4 + 0] = instances[i].x;
+    instanceData[i * 4 + 1] = instances[i].y;
+    instanceData[i * 4 + 2] = instances[i].z;
+    instanceData[i * 4 + 3] = height;
+  }
+  
+  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.instanceBuffer);
+  this.gl.bufferData(this.gl.ARRAY_BUFFER, instanceData, this.gl.DYNAMIC_DRAW);
+  
+  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.cubeBuffer);
+  
+  this.gl.enableVertexAttribArray(this.attribLocations.block.position);
+  this.gl.vertexAttribPointer(this.attribLocations.block.position, 3, this.gl.FLOAT, false, 32, 0);
+  
+  this.gl.enableVertexAttribArray(this.attribLocations.block.texCoord);
+  this.gl.vertexAttribPointer(this.attribLocations.block.texCoord, 2, this.gl.FLOAT, false, 32, 12);
+  
+  this.gl.enableVertexAttribArray(this.attribLocations.block.normal);
+  this.gl.vertexAttribPointer(this.attribLocations.block.normal, 3, this.gl.FLOAT, false, 32, 20);
+  
+  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.instanceBuffer);
+  this.gl.enableVertexAttribArray(this.attribLocations.block.instanceData);
+  this.gl.vertexAttribPointer(this.attribLocations.block.instanceData, 4, this.gl.FLOAT, false, 16, 0);
+  this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 1);
+  
+  this.gl.uniform4f(this.uniformLocations.block.camera, camera.x, camera.y, camera.z, camera.angle);
+  this.gl.uniform2f(this.uniformLocations.block.resolution, this.canvas.width, this.canvas.height);
+  this.gl.uniform1i(this.uniformLocations.block.spriteIndex, tileType);
+  this.gl.uniform1f(this.uniformLocations.block.spriteCount, this.tile_items_size);
+  
+  this.gl.uniform1i(this.uniformLocations.block.illumination, this.ILLUMINATION);
+  this.gl.uniform1f(this.uniformLocations.block.ambient, this.AMBIENT_LIGHT);
+  this.gl.uniform1f(this.uniformLocations.block.diffuse, this.LIGHT_DIFFUSE);
+  
+  const len = Math.sqrt(this.lightDir[0]*this.lightDir[0] + this.lightDir[1]*this.lightDir[1] + this.lightDir[2]*this.lightDir[2]);
+  this.gl.uniform3f(this.uniformLocations.block.lightDir, this.lightDir[0]/len, this.lightDir[1]/len, this.lightDir[2]/len);
+  
+  this.gl.activeTexture(this.gl.TEXTURE0);
+  this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
+  this.gl.uniform1i(this.uniformLocations.block.spritesheet, 0);
+  
+  // Añadir uniforms de niebla antes del drawArraysInstanced:
   this.gl.uniform1i(this.uniformLocations.block.fogEnabled, this.FOG_ENABLED);
   this.gl.uniform1f(this.uniformLocations.block.fogStart, this.FOG_START);
   this.gl.uniform1f(this.uniformLocations.block.fogEnd, this.FOG_END);
   this.gl.uniform3f(this.uniformLocations.block.fogColor, 
     this.FOG_COLOR[0], this.FOG_COLOR[1], this.FOG_COLOR[2]);
-
-    
-    this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, 36, instances.length);
-    
-    this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 0);
-  }
+  
+  this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, 36, instances.length);
+  
+  this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 0);
+}
   
   // Método principal de render
   render(independentObjects = [], renderSky = true) {
