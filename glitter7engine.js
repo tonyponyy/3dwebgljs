@@ -799,17 +799,7 @@ for (let i = 0; i < this.tileMap.length; i++) {
       this.cachedSinA = Math.sin(-camera.angle);
     }
   }
-  
-  isInFrustum(worldX, worldY, camera) {
-    const dx = worldX - camera.x;
-    const dy = worldY - camera.y;
-    const rotY = dx * this.cachedSinA + dy * this.cachedCosA;
-    if (rotY < 0.1 || rotY > this.MAX_RENDER_DISTANCE) return false;
-    const rotX = dx * this.cachedCosA - dy * this.cachedSinA;
-    const screenX = 0.5 + rotX / rotY;
-    return screenX >= -this.FRUSTUM_MARGIN && screenX <= (1.0 + this.FRUSTUM_MARGIN);
-  }
-  
+    
   // Proyección
   projectToScreen(worldX, worldY, camera) {
     const dx = worldX - camera.x;
@@ -908,102 +898,118 @@ getRotatedBillboardSprite(baseTile, cameraAngle, billboardX, billboardY, fixedOr
 }
   
   // Recolectar objetos renderizables
-  collectRenderableObjects(camera, independentObjects = []) {
+collectRenderableObjects(camera, independentObjects = []) {
   this.objectCount = 0;
   const camX = camera.x;
   const camY = camera.y;
+  const maxDistSq = this.MAX_RENDER_DISTANCE * this.MAX_RENDER_DISTANCE;
+  
+  // Calcular región de tiles a revisar (solo tiles cercanos a la cámara)
+  const maxDist = this.MAX_RENDER_DISTANCE;
+  const minX = Math.max(0, Math.floor(camX - maxDist));
+  const maxX = Math.min(this.MAP_WIDTH - 1, Math.ceil(camX + maxDist));
+  const minY = Math.max(0, Math.floor(camY - maxDist));
+  const maxY = Math.min(this.MAP_HEIGHT - 1, Math.ceil(camY + maxDist));
   
   // Objetos del tilemap
   if (this.tileMap) {
-    for (let i = 0; i < this.tileMap.length; i++) {
-      const tile = this.tileMap[i];
-      if (tile === 0) continue;
-      
-      const mapX = i % this.MAP_WIDTH;
-      const mapY = Math.floor(i / this.MAP_WIDTH);
-      const worldX = mapX + 0.5;
-      const worldY = mapY + 0.5;
-      
-      if (!this.isInFrustum(worldX, worldY, camera)) continue;
-      
-      const dx = worldX - camX;
-      const dy = worldY - camY;
-      const distSq = dx * dx + dy * dy;
-      
-      // Obtener altura del heightMap
-      const heightMapValue = this.heightMap ? (this.heightMap[i] || 0.0) : 0.0;
-      
-      if (this.isBillboard(tile)) {
-        // Obtener elevación del suelo
-        const groundElevation = heightMapValue;
+    for (let mapY = minY; mapY <= maxY; mapY++) {
+      for (let mapX = minX; mapX <= maxX; mapX++) {
+        const i = mapY * this.MAP_WIDTH + mapX;
+        const tile = this.tileMap[i];
+        if (tile === 0) continue;
         
-        // Calcular altura del bloque base si existe
-        const groundTile = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
-        const blockHeight = this.isBlock(groundTile) ? (this.tile_heights[groundTile] || 0.0) : 0.0;
+        const worldX = mapX + 0.5;
+        const worldY = mapY + 0.5;
+        const dx = worldX - camX;
+        const dy = worldY - camY;
+        const distSq = dx * dx + dy * dy;
         
-        // Altura total = elevación del suelo + altura del bloque base
-        const totalHeight = groundElevation + blockHeight;
+        // Check distancia + frustum combinados (inline para mayor velocidad)
+        if (distSq > maxDistSq) continue;
         
-        // Si hay elevación del suelo, crear bloque base
-        if (groundElevation > 0) {
-          this.tempObjects[this.objectCount++] = {
-            type: 'block',
-            x: worldX,
-            y: 0.0,
-            z: worldY,
-            tile: groundTile,
-            dist: distSq,
-            customHeight: groundElevation
-          };
-        }
+        const rotY = dx * this.cachedSinA + dy * this.cachedCosA;
+        if (rotY < 0.1) continue;
         
-        // Renderizar billboard encima
-        const proj = this.projectToScreenWithHeight(worldX, worldY, totalHeight, camera);
-        if (proj.visible) {
-          let finalTile = tile;
-          if (this.isRotatableBillboard(tile)) {
-            finalTile = this.getRotatedBillboardSprite(tile, camera.angle, worldX, worldY, null);
+        const rotX = dx * this.cachedCosA - dy * this.cachedSinA;
+        const screenX = 0.5 + rotX / rotY;
+        if (screenX < -this.FRUSTUM_MARGIN || screenX > (1.0 + this.FRUSTUM_MARGIN)) continue;
+        
+        // Obtener altura del heightMap
+        const heightMapValue = this.heightMap ? (this.heightMap[i] || 0.0) : 0.0;
+        
+        if (this.isBillboard(tile)) {
+          // Obtener elevación del suelo
+          const groundElevation = heightMapValue;
+          
+          // Calcular altura del bloque base si existe
+          const groundTile = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
+          const blockHeight = this.isBlock(groundTile) ? (this.tile_heights[groundTile] || 0.0) : 0.0;
+          
+          // Altura total = elevación del suelo + altura del bloque base
+          const totalHeight = groundElevation + blockHeight;
+          
+          // Si hay elevación del suelo, crear bloque base
+          if (groundElevation > 0) {
+            this.tempObjects[this.objectCount++] = {
+              type: 'block',
+              x: worldX,
+              y: 0.0,
+              z: worldY,
+              tile: groundTile,
+              dist: distSq,
+              customHeight: groundElevation
+            };
           }
           
-          const scale = this.billboard_scales[tile] || 1.0;
+          // Renderizar billboard encima
+          const proj = this.projectToScreenWithHeight(worldX, worldY, totalHeight, camera);
+          if (proj.visible) {
+            let finalTile = tile;
+            if (this.isRotatableBillboard(tile)) {
+              finalTile = this.getRotatedBillboardSprite(tile, camera.angle, worldX, worldY, null);
+            }
+            
+            const scale = this.billboard_scales[tile] || 1.0;
+            
+            this.tempObjects[this.objectCount++] = {
+              type: 'billboard',
+              x: worldX,
+              y: worldY,
+              tile: finalTile,
+              dist: distSq,
+              proj,
+              scale: scale
+            };
+          }
           
-          this.tempObjects[this.objectCount++] = {
-            type: 'billboard',
-            x: worldX,
-            y: worldY,
-            tile: finalTile,
-            dist: distSq,
-            proj,
-            scale: scale
-          };
-        }
-        
-      } else if (this.isBlock(tile)) {
-        // Bloque normal: usar heightMap si existe y es > 0, sino usar tile_heights
-        const customHeight = (heightMapValue > 0) ? heightMapValue : null;
-        
-        this.tempObjects[this.objectCount++] = {
-          type: 'block',
-          x: worldX,
-          y: 0.0,
-          z: worldY,
-          tile,
-          dist: distSq,
-          customHeight: customHeight
-        };
-        
-      } else {
-        // Tile de suelo - si tiene altura en heightMap, convertirlo en bloque
-        if (heightMapValue > 0) {
+        } else if (this.isBlock(tile)) {
+          // Bloque normal: usar heightMap si existe y es > 0, sino usar tile_heights
+          const customHeight = (heightMapValue > 0) ? heightMapValue : null;
+          
           this.tempObjects[this.objectCount++] = {
             type: 'block',
             x: worldX,
             y: 0.0,
             z: worldY,
-            tile: tile,
+            tile,
             dist: distSq,
-            customHeight: heightMapValue
+            customHeight: customHeight
           };
+          
+        } else {
+          // Tile de suelo - si tiene altura en heightMap, convertirlo en bloque
+          if (heightMapValue > 0) {
+            this.tempObjects[this.objectCount++] = {
+              type: 'block',
+              x: worldX,
+              y: 0.0,
+              z: worldY,
+              tile: tile,
+              dist: distSq,
+              customHeight: heightMapValue
+            };
+          }
         }
       }
     }
@@ -1015,11 +1021,19 @@ getRotatedBillboardSprite(baseTile, cameraAngle, billboardX, billboardY, fixedOr
     const worldY = obj.y;
     const height = obj.z;
     
-    if (!this.isInFrustum(worldX, worldY, camera)) continue;
-    
     const dx = worldX - camX;
     const dy = worldY - camY;
     const distSq = dx * dx + dy * dy;
+    
+    // Check distancia + frustum para objetos independientes
+    if (distSq > maxDistSq) continue;
+    
+    const rotY = dx * this.cachedSinA + dy * this.cachedCosA;
+    if (rotY < 0.1) continue;
+    
+    const rotX = dx * this.cachedCosA - dy * this.cachedSinA;
+    const screenX = 0.5 + rotX / rotY;
+    if (screenX < -this.FRUSTUM_MARGIN || screenX > (1.0 + this.FRUSTUM_MARGIN)) continue;
     
     if (this.isBillboard(obj.tile)) {
       const proj = this.projectToScreenWithHeight(worldX, worldY, height, camera);
