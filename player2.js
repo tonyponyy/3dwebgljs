@@ -30,9 +30,9 @@ const PLAYER_CONFIG = {
 // ================= ANIMACIONES ======================
 const ANIMATION_CONFIG = {
   TILES: {
-    IDLE: 39,
-    WALK: [39],
-    JUMP: 39
+    IDLE: 33,
+    WALK: [33],
+    JUMP: 34
   },
   WALK_SPEED: 0.15,
   MOVEMENT_THRESHOLD: 0.02
@@ -173,18 +173,26 @@ function updatePlayer(player, keys, deltaTime = 1 / 60) {
   const newX = obj.x + player.vx;
   const newY = obj.y + player.vy;
 
-  const resolved = resolveCollisions(
-    newX,
-    newY,
-    obj.z,
-    COLLISION_CONFIG.PLAYER_RADIUS,
-    player.tileMap,
-    player.independentObjects
-  );
+const resolved = resolveCollisions(
+  newX,
+  newY,
+  obj.z,
+  COLLISION_CONFIG.PLAYER_RADIUS,
+  player.tileMap,
+  player.independentObjects,
+  obj.x,  // ← Posición anterior X
+  obj.y   // ← Posición anterior Y
+);
 
+if (resolved.blocked) {
+  // ===== REBOTE TIPO KART =====
+  player.vx *= -0.6;
+  player.vy *= -0.6;
+  player.speed *= -0.4;
+} else {
   obj.x = resolved.x;
   obj.y = resolved.y;
-
+}
   // ================= SALTO ======================
   const groundHeight = getTerrainHeight(
     obj.x,
@@ -224,12 +232,18 @@ function updatePlayer(player, keys, deltaTime = 1 / 60) {
     player.velocityZ = 0;
   }
 
+  if (obj.z > 0 && !grounded){
+    obj.z -=0.01
+  }
+  obj.z = (parseInt(obj.z) == 0) && ((obj.z - parseInt(obj.z) ) < 0.9 )? parseInt(obj.z) : obj.z ;
+
   obj.z += player.velocityZ;
 
   if (obj.z < groundHeight) {
     obj.z = groundHeight;
     player.velocityZ = 0;
   }
+
 
   // ================= ANIMACIÓN ======================
   updatePlayerAnimation(player, grounded);

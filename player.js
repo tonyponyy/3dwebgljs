@@ -30,7 +30,7 @@ const PLAYER_CONFIG = {
 // Configuración de animaciones
 const ANIMATION_CONFIG = {
   TILES: {
-    IDLE: 10,
+    IDLE: 6,
     WALK: [11, 12, 13],
     JUMP: 14
   },

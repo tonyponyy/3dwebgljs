@@ -249,6 +249,12 @@ tileMap = TileMaps["isla"].layers[0].data
 // Crear el motor
 const canvas = document.getElementById('glCanvas');
 const engine = new Glitter7engine(canvas, {
+  waterTiles: [1], // Si tienes más tiles de agua
+waterSpeed: 0.8,   // Más rápido
+waterWave: 0.2,    // Olas más pronunciadas
+     
+
+
   map: {
     array: tileMap,
     mapWidth: 200,
@@ -303,7 +309,7 @@ heightMap: ei
 imageToBase64("img/carretera1.png", (img) => engine.loadSpritesheet(img))
 
 // Objetos independientes
-let playerObject = { tile: 39, x: 85, y: 182, z: 0.0,scale:0.5,orientation:180 };
+let playerObject = { tile: 6, x: 67, y: 90, z: 0.0,scale:0.5,orientation:1.29 };
 const independentObjects = [
   playerObject         // Triple de tamaño (override de billboardScales)
   

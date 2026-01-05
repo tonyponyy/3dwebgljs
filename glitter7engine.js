@@ -8,7 +8,8 @@
     const FOG_ENABLED_DEFAULT = true;
     const FOG_START_DEFAULT = 30;
     const FOG_END_DEFAULT = 80;
-    const CANVAS_POWER_PREFERENCE_DEFAULT = 'default'; 
+    //const CANVAS_POWER_PREFERENCE_DEFAULT = 'default'; 
+    const CANVAS_POWER_PREFERENCE_DEFAULT ='high-performance'
     const CANVAS_ANTIALIAS_DEFAULT = true; 
     const SKYDOME_HORIZONTAL_REP_DEFAULT = '1'
     const SKYDOME_VERTICAL_REP_DEFAULT = '1'
@@ -18,6 +19,10 @@
     const MAX_RENDER_DISTANCE_DEFAULT = 100;
     const FRUSTUM_MARGIN_DEFAULT = 0.4;
     const DEFAULT_BILLBOARD_GROUND_DEFAULT = 0;
+    const WATER_TILES_DEFAULT = [];
+    const WATER_SPEED_DEFAULT = 0.05;
+    const WATER_WAVE_DEFAULT = 0.01;
+
 
 
 class Glitter7engine {
@@ -44,10 +49,26 @@ class Glitter7engine {
     this.heightMap = config.heightMap || null;
     this.DEFAULT_BILLBOARD_GROUND = config.defaultBillboardGround || DEFAULT_BILLBOARD_GROUND_DEFAULT;
     this.billboard_ground_tiles = config.billboardGroundTiles || {};
+    //aguas
+    this.water_tiles = config.waterTiles || WATER_TILES_DEFAULT;
+    this.water_tiles_set = new Set(this.water_tiles);
+    this.WATER_SPEED = config.waterSpeed || WATER_SPEED_DEFAULT;
+    this.WATER_WAVE = config.waterWave || WATER_WAVE_DEFAULT;
+    this.time = 0; // Para animaciones
     // Billboards rotables y escalas
     this.rotatable_billboards = config.rotatableBillboards || [];
     this.rotatable_billboards_set = new Set(this.rotatable_billboards);
     this.billboard_scales = config.billboardScales || {}; // {tile: scale}
+    this.RAMP_ENABLED = config.rampEnabled !== undefined ? config.rampEnabled : true;
+
+  // Tipos de rampas posibles
+  this.RAMP_TYPES = {
+    STRAIGHT: 'straight',      // Rampa recta (1 lado alto, 1 bajo)
+    INNER_CORNER: 'inner',     // Esquina interior (2 lados altos adyacentes)
+    OUTER_CORNER: 'outer',     // Esquina exterior (2 lados bajos adyacentes)
+    NONE: 'none'
+  };
+
 
     
     // Iluminación
@@ -283,8 +304,12 @@ getSkydomeFS() {
       gl_Position = vec4(a_position, 0.0, 1.0);
     }`;
   }
+
+getGroundFS() {
+  const waterChecks = this.water_tiles.length > 0 
+    ? this.water_tiles.map(tile => `tileIndex == ${tile}u`).join(' || ')
+    : 'false';
   
-  getGroundFS() {
   return `#version 300 es
   precision highp float;
   precision highp usampler2D;
@@ -298,6 +323,7 @@ getSkydomeFS() {
   uniform float u_fogStart;
   uniform float u_fogEnd;
   uniform vec3 u_fogColor;
+  uniform float u_time;
   
   void main() {
     float angle = u_camera.w;
@@ -327,16 +353,25 @@ getSkydomeFS() {
     uint tileIndex = texture(u_tileMapTexture, tileTexCoord).r;
 
     if(tileIndex == 0u) {
-      discard;  // Crea un agujero transparente
-    }
-    
-    if(tileIndex == 0u) {
-      outColor = vec4(0.3, 0.3, 0.3, 1.0);
-      return;
+      discard;
     }
     
     float tx = fract(worldX);
     float ty = fract(worldY);
+    
+    bool isWater = ${waterChecks};
+    
+    if (isWater) {
+      tx += u_time * ${this.WATER_SPEED};
+      ty += sin(u_time * 2.0 + worldX * 3.0) * ${this.WATER_WAVE};
+      tx = fract(tx);
+      ty = fract(ty);
+    }
+    
+    // SOLUCIÓN: Añadir padding en UVs para evitar bleeding
+    float padding = 0.5 / 512.0; // Ajusta según resolución de tu spritesheet
+    tx = mix(padding, 1.0 - padding, tx);
+    ty = mix(padding, 1.0 - padding, ty);
     
     float spriteWidth = 1.0 / u_spriteCount;
     vec2 texCoord = vec2(tx * spriteWidth, ty);
@@ -344,16 +379,19 @@ getSkydomeFS() {
     
     vec4 baseColor = texture(u_spritesheet, texCoord);
     
-    // Aplicar niebla
     if (u_fogEnabled) {
       float distance = perspective;
-      float fogFactor = clamp((u_fogEnd - distance) / (u_fogEnd - u_fogStart), 0.0, 1.0);
+      float heightFactor = 1.0 - clamp(u_camera.z / 10.0, 0.0, 1.0);
+      float enhancedFogEnd = u_fogEnd * (1.0 + heightFactor * 0.5);
+      
+      float fogFactor = clamp((enhancedFogEnd - distance) / (enhancedFogEnd - u_fogStart), 0.0, 1.0);
       outColor = vec4(mix(u_fogColor, baseColor.rgb, fogFactor), baseColor.a);
     } else {
       outColor = baseColor;
     }
   }`;
 }
+
 
   
 getBillboardVS() {
@@ -402,7 +440,6 @@ getBillboardVS() {
     }
   }`;
 }
-
 getBlockVS() {
   return `#version 300 es
   in vec3 a_position;
@@ -417,6 +454,7 @@ getBlockVS() {
   out float v_depth;
   out float v_height;
   out vec3 v_normal;
+  out vec3 v_worldPos; // ← NUEVO para AO
   
   void main() {
     vec3 instancePos = a_instanceData.xyz;
@@ -426,6 +464,7 @@ getBlockVS() {
     scaledPos.y *= height;
     
     vec3 worldPos = scaledPos + instancePos;
+    v_worldPos = worldPos; // ← NUEVO
     
     float dx = worldPos.x - u_camera.x;
     float dy = worldPos.z - u_camera.y;
@@ -464,14 +503,17 @@ getBlockVS() {
     v_normal = a_normal;
   }`;
 }
-  
- getBlockFS() {
+
+
+getBlockFS() {
   return `#version 300 es
   precision highp float;
   in vec2 v_texCoord;
   in float v_depth;
   in float v_height;
   in vec3 v_normal;
+  in vec3 v_worldPos;
+  in vec3 v_blockCenter;
   out vec4 outColor;
   
   uniform sampler2D u_spritesheet;
@@ -485,6 +527,30 @@ getBlockVS() {
   uniform float u_fogStart;
   uniform float u_fogEnd;
   uniform vec3 u_fogColor;
+  uniform vec4 u_camera;
+  
+  // ═══════════════════════════════════════
+  // AMBIENT OCCLUSION MINIMALISTA
+  // Solo en caras laterales y base, SIN patrón de baldosas
+  // ═══════════════════════════════════════
+  float calculateAO() {
+    vec3 localPos = fract(v_worldPos);
+    
+    // AO SOLO basado en altura (gradiente vertical)
+    float heightFactor = smoothstep(0.0, 0.4, localPos.y);
+    float ao = mix(0.8, 1.0, heightFactor);
+    
+    // Caras laterales: más oscuras (basado en normal, no en posición)
+    if (abs(v_normal.y) < 0.3) {
+      ao *= 0.93;  // Caras verticales más oscuras
+    }
+    // Cara superior: sin AO (completamente uniforme)
+    else if (v_normal.y > 0.9) {
+      ao = 1.0;
+    }
+    
+    return ao;
+  }
   
   void main() {
     if (v_depth < 0.0) discard;
@@ -498,6 +564,12 @@ getBlockVS() {
     
     vec3 finalColor = color.rgb;
     
+    // ═══════════════════════════════════════
+    // Aplicar AMBIENT OCCLUSION
+    // ═══════════════════════════════════════
+    float ao = calculateAO();
+    finalColor *= ao;
+    
     // Aplicar iluminación
     if (u_illumination) {
       float diffuseLight = max(dot(v_normal, u_lightDir), 0.0);
@@ -505,15 +577,22 @@ getBlockVS() {
       finalColor *= lighting;
     }
     
-    // Aplicar niebla
+    // ═══════════════════════════════════════
+    // NIEBLA CON DEGRADADO DE ALTURA
+    // ═══════════════════════════════════════
     if (u_fogEnabled) {
-      float fogFactor = clamp((u_fogEnd - v_depth) / (u_fogEnd - u_fogStart), 0.0, 1.0);
+      // Factor de altura (más niebla cerca del suelo)
+      float heightFactor = 1.0 - clamp(u_camera.z / 10.0, 0.0, 1.0);
+      float enhancedFogEnd = u_fogEnd * (1.0 + heightFactor * 0.5);
+      
+      float fogFactor = clamp((enhancedFogEnd - v_depth) / (enhancedFogEnd - u_fogStart), 0.0, 1.0);
       finalColor = mix(u_fogColor, finalColor, fogFactor);
     }
     
     outColor = vec4(finalColor, color.a);
   }`;
 }
+
   initBuffers() {
     // Buffer para el quad del suelo y cielo
     this.positionBuffer = this.gl.createBuffer();
@@ -646,6 +725,7 @@ createSkydomeGeometry() {
       skydomeTexture: this.gl.getUniformLocation(this.skydomeProgram, 'u_skydomeTexture')
     },
     ground: {
+      time: this.gl.getUniformLocation(this.program, 'u_time'),
       spriteCount: this.gl.getUniformLocation(this.program, 'u_spriteCount'),
       camera: this.gl.getUniformLocation(this.program, 'u_camera'),
       tileMapTexture: this.gl.getUniformLocation(this.program, 'u_tileMapTexture'),
@@ -719,11 +799,16 @@ createSkydomeGeometry() {
       
       image.onload = () => {
         this.tile_items_size = Math.floor(image.width / this.TILE_SIZE);
+        
         this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
         this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
+
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST); 
+      
+      this.gl.generateMipmap(this.gl.TEXTURE_2D); // Genera mipmaps para distancias
+
         
         resolve();
       };
@@ -904,14 +989,12 @@ collectRenderableObjects(camera, independentObjects = []) {
   const camY = camera.y;
   const maxDistSq = this.MAX_RENDER_DISTANCE * this.MAX_RENDER_DISTANCE;
   
-  // Calcular región de tiles a revisar (solo tiles cercanos a la cámara)
   const maxDist = this.MAX_RENDER_DISTANCE;
   const minX = Math.max(0, Math.floor(camX - maxDist));
   const maxX = Math.min(this.MAP_WIDTH - 1, Math.ceil(camX + maxDist));
   const minY = Math.max(0, Math.floor(camY - maxDist));
   const maxY = Math.min(this.MAP_HEIGHT - 1, Math.ceil(camY + maxDist));
   
-  // Objetos del tilemap
   if (this.tileMap) {
     for (let mapY = minY; mapY <= maxY; mapY++) {
       for (let mapX = minX; mapX <= maxX; mapX++) {
@@ -925,7 +1008,6 @@ collectRenderableObjects(camera, independentObjects = []) {
         const dy = worldY - camY;
         const distSq = dx * dx + dy * dy;
         
-        // Check distancia + frustum combinados (inline para mayor velocidad)
         if (distSq > maxDistSq) continue;
         
         const rotY = dx * this.cachedSinA + dy * this.cachedCosA;
@@ -935,85 +1017,225 @@ collectRenderableObjects(camera, independentObjects = []) {
         const screenX = 0.5 + rotX / rotY;
         if (screenX < -this.FRUSTUM_MARGIN || screenX > (1.0 + this.FRUSTUM_MARGIN)) continue;
         
-        // Obtener altura del heightMap
         const heightMapValue = this.heightMap ? (this.heightMap[i] || 0.0) : 0.0;
         
         if (this.isBillboard(tile)) {
-          // Obtener elevación del suelo
-          const groundElevation = heightMapValue;
-          
-          // Calcular altura del bloque base si existe
-          const groundTile = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
-          const blockHeight = this.isBlock(groundTile) ? (this.tile_heights[groundTile] || 0.0) : 0.0;
-          
-          // Altura total = elevación del suelo + altura del bloque base
-          const totalHeight = groundElevation + blockHeight;
-          
-          // Si hay elevación del suelo, crear bloque base
-          if (groundElevation > 0) {
-            this.tempObjects[this.objectCount++] = {
-              type: 'block',
-              x: worldX,
-              y: 0.0,
-              z: worldY,
-              tile: groundTile,
-              dist: distSq,
-              customHeight: groundElevation
-            };
-          }
-          
-          // Renderizar billboard encima
-          const proj = this.projectToScreenWithHeight(worldX, worldY, totalHeight, camera);
-          if (proj.visible) {
-            let finalTile = tile;
-            if (this.isRotatableBillboard(tile)) {
-              finalTile = this.getRotatedBillboardSprite(tile, camera.angle, worldX, worldY, null);
-            }
-            
-            const scale = this.billboard_scales[tile] || 1.0;
-            
-            this.tempObjects[this.objectCount++] = {
-              type: 'billboard',
-              x: worldX,
-              y: worldY,
-              tile: finalTile,
-              dist: distSq,
-              proj,
-              scale: scale
-            };
-          }
-          
-        } else if (this.isBlock(tile)) {
-          // Bloque normal: usar heightMap si existe y es > 0, sino usar tile_heights
-          const customHeight = (heightMapValue > 0) ? heightMapValue : null;
-          
-          this.tempObjects[this.objectCount++] = {
-            type: 'block',
-            x: worldX,
-            y: 0.0,
-            z: worldY,
-            tile,
-            dist: distSq,
-            customHeight: customHeight
-          };
-          
-        } else {
-          // Tile de suelo - si tiene altura en heightMap, convertirlo en bloque
-          if (heightMapValue > 0) {
-            this.tempObjects[this.objectCount++] = {
-              type: 'block',
-              x: worldX,
-              y: 0.0,
-              z: worldY,
-              tile: tile,
-              dist: distSq,
-              customHeight: heightMapValue
-            };
-          }
-        }
+  // Billboards: detectar si necesitan rampa en el suelo
+  const groundElevation = heightMapValue;
+  const groundTile = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
+  
+  // Intentar crear rampa para el suelo del billboard
+  let groundIsRamp = false;
+  let finalGroundHeight = groundElevation; // Altura final del suelo
+  
+  if (this.RAMP_ENABLED && groundElevation > 0 && groundTile !== 0) {
+    const rampInfo = this.getRampType(mapX, mapY, groundElevation);
+    
+    if (rampInfo.type !== this.RAMP_TYPES.NONE) {
+      const neighbors = this.getNeighborHeights(mapX, mapY);
+      const baseHeight = Math.min(
+        neighbors.north,
+        neighbors.east,
+        neighbors.south,
+        neighbors.west
+      );
+      
+      // Bloque base si hay altura base
+         const targetHeight = groundElevation;
+    if (targetHeight - baseHeight === 1) {  
+      if (baseHeight > 0) {
+        this.tempObjects[this.objectCount++] = {
+          type: 'block',
+          x: worldX,
+          y: 0.0,
+          z: worldY,
+          tile: groundTile,
+          dist: distSq,
+          customHeight: baseHeight
+        };
       }
+      
+      // Rampa encima
+      this.tempObjects[this.objectCount++] = {
+        type: 'ramp',
+        x: worldX,
+        y: baseHeight,
+        z: worldY,
+        tile: groundTile,
+        dist: distSq,
+        rampInfo: rampInfo,
+        baseHeight: baseHeight,
+        targetHeight: groundElevation
+      };
+      groundIsRamp = true;
+      // Si es rampa, la altura final es groundElevation (ya incluida en la rampa)
+      finalGroundHeight = groundElevation;
     }
   }
+  }
+  
+  // Si no es rampa pero tiene elevación, crear bloque base
+  if (!groundIsRamp && groundElevation > 0 && groundTile !== 0) {
+    this.tempObjects[this.objectCount++] = {
+      type: 'block',
+      x: worldX,
+      y: 0.0,
+      z: worldY,
+      tile: groundTile,
+      dist: distSq,
+      customHeight: groundElevation
+    };
+    // Si es bloque y el bloque tiene altura propia, sumarla
+    const blockHeight = this.isBlock(groundTile) ? (this.tile_heights[groundTile] || 0.0) : 0.0;
+    finalGroundHeight = groundElevation + blockHeight;
+  }
+  
+  // Renderizar billboard encima (usar finalGroundHeight)
+  const proj = this.projectToScreenWithHeight(worldX, worldY, finalGroundHeight, camera);
+  if (proj.visible) {
+    let finalTile = tile;
+    if (this.isRotatableBillboard(tile)) {
+      finalTile = this.getRotatedBillboardSprite(tile, camera.angle, worldX, worldY, null);
+    }
+    
+    const scale = this.billboard_scales[tile] || 1.0;
+    
+    this.tempObjects[this.objectCount++] = {
+      type: 'billboard',
+      x: worldX,
+      y: worldY,
+      tile: finalTile,
+      dist: distSq,
+      proj,
+      scale: scale
+    };
+  }
+} else if (this.isBlock(tile)) {
+  if (this.RAMP_ENABLED && heightMapValue > 0) {
+const rampInfo = this.getRampType(mapX, mapY, heightMapValue);
+
+if (rampInfo.type !== this.RAMP_TYPES.NONE) {
+  const neighbors = this.getNeighborHeights(mapX, mapY);
+
+  const baseHeight = Math.min(
+    neighbors.north,
+    neighbors.east,
+    neighbors.south,
+    neighbors.west
+  );
+
+  const targetHeight = heightMapValue;
+
+  // Validación mínima
+  if (targetHeight - baseHeight === 1) {
+    if (baseHeight > 0) {
+      this.tempObjects[this.objectCount++] = {
+        type: 'block',
+        x: worldX,
+        y: 0.0,
+        z: worldY,
+        tile,
+        dist: distSq,
+        customHeight: baseHeight
+      };
+    }
+
+    this.tempObjects[this.objectCount++] = {
+      type: 'ramp',
+      x: worldX,
+      y: baseHeight,
+      z: worldY,
+      tile,
+      dist: distSq,
+      rampInfo,
+      baseHeight,
+      targetHeight
+    };
+
+    continue;
+  }
+}
+
+  }
+  
+  // Bloque normal (sin cambios)
+  const customHeight = (heightMapValue > 0) ? heightMapValue : null;
+  this.tempObjects[this.objectCount++] = {
+    type: 'block',
+    x: worldX,
+    y: 0.0,
+    z: worldY,
+    tile,
+    dist: distSq,
+    customHeight: customHeight
+  };
+} else {
+          // Tile de suelo - detectar si debe convertirse en rampa o bloque
+         if (heightMapValue > 0) {
+    if (this.RAMP_ENABLED) {
+    const rampInfo = this.getRampType(mapX, mapY, heightMapValue);
+
+if (rampInfo.type !== this.RAMP_TYPES.NONE) {
+  const neighbors = this.getNeighborHeights(mapX, mapY);
+
+  const baseHeight = Math.min(
+    neighbors.north,
+    neighbors.east,
+    neighbors.south,
+    neighbors.west
+  );
+
+  const targetHeight = heightMapValue;
+
+  // Validación mínima
+  if (targetHeight - baseHeight === 1) {
+    if (baseHeight > 0) {
+      this.tempObjects[this.objectCount++] = {
+        type: 'block',
+        x: worldX,
+        y: 0.0,
+        z: worldY,
+        tile,
+        dist: distSq,
+        customHeight: baseHeight
+      };
+    }
+
+    this.tempObjects[this.objectCount++] = {
+      type: 'ramp',
+      x: worldX,
+      y: baseHeight,
+      z: worldY,
+      tile,
+      dist: distSq,
+      rampInfo,
+      baseHeight,
+      targetHeight
+    };
+
+    continue;
+  }
+}
+
+    }
+    
+    // Convertir en bloque normal (sin cambios)
+    this.tempObjects[this.objectCount++] = {
+      type: 'block',
+      x: worldX,
+      y: 0.0,
+      z: worldY,
+      tile: tile,
+      dist: distSq,
+      customHeight: heightMapValue
+    };
+  }
+}
+        }
+      
+    }
+  }
+
   
   // Objetos independientes
   for (const obj of independentObjects) {
@@ -1151,36 +1373,41 @@ createProjectionMatrix() {
 
   
   // Renderizar suelo
-  renderGround(camera) {
-    this.gl.disable(this.gl.DEPTH_TEST);
-    this.gl.enable(this.gl.BLEND);
-    this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
-    
-    this.gl.useProgram(this.program);
-    this.gl.enableVertexAttribArray(this.attribLocations.ground.position);
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
-    this.gl.vertexAttribPointer(this.attribLocations.ground.position, 2, this.gl.FLOAT, false, 0, 0);
-    this.gl.uniform1f(this.uniformLocations.ground.spriteCount, this.tile_items_size);
-    this.gl.uniform4f(this.uniformLocations.ground.camera, camera.x, camera.y, camera.z, camera.angle);
-    
-    this.gl.activeTexture(this.gl.TEXTURE0);
-    this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
-    this.gl.uniform1i(this.uniformLocations.ground.spritesheet, 0);
-    
-    this.gl.activeTexture(this.gl.TEXTURE1);
-    this.gl.bindTexture(this.gl.TEXTURE_2D, this.tileMapTexture);
-    this.gl.uniform1i(this.uniformLocations.ground.tileMapTexture, 1);
+renderGround(camera) {
+  this.gl.disable(this.gl.DEPTH_TEST);
+  this.gl.enable(this.gl.BLEND);
+  this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
+  
+  this.gl.useProgram(this.program);
+  this.gl.enableVertexAttribArray(this.attribLocations.ground.position);
+  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
+  this.gl.vertexAttribPointer(this.attribLocations.ground.position, 2, this.gl.FLOAT, false, 0, 0);
+  this.gl.uniform1f(this.uniformLocations.ground.spriteCount, this.tile_items_size);
+  this.gl.uniform4f(this.uniformLocations.ground.camera, camera.x, camera.y, camera.z, camera.angle);
+  
+  this.gl.activeTexture(this.gl.TEXTURE0);
+  this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
+  this.gl.uniform1i(this.uniformLocations.ground.spritesheet, 0);
+  
+  this.gl.activeTexture(this.gl.TEXTURE1);
+  this.gl.bindTexture(this.gl.TEXTURE_2D, this.tileMapTexture);
+  this.gl.uniform1i(this.uniformLocations.ground.tileMapTexture, 1);
 
-      // niebla
-    this.gl.uniform1i(this.uniformLocations.ground.fogEnabled, this.FOG_ENABLED);
-    this.gl.uniform1f(this.uniformLocations.ground.fogStart, this.FOG_START);
-    this.gl.uniform1f(this.uniformLocations.ground.fogEnd, this.FOG_END);
-    this.gl.uniform3f(this.uniformLocations.ground.fogColor, 
+  // Niebla
+  this.gl.uniform1i(this.uniformLocations.ground.fogEnabled, this.FOG_ENABLED);
+  this.gl.uniform1f(this.uniformLocations.ground.fogStart, this.FOG_START);
+  this.gl.uniform1f(this.uniformLocations.ground.fogEnd, this.FOG_END);
+  this.gl.uniform3f(this.uniformLocations.ground.fogColor, 
     this.FOG_COLOR[0], this.FOG_COLOR[1], this.FOG_COLOR[2]);
 
-    
-    this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
-  }
+  // ═══════════════════════════════════════
+  // TIEMPO PARA ANIMACIÓN DE AGUA
+  // ═══════════════════════════════════════
+  this.gl.uniform1f(this.uniformLocations.ground.time, this.time);
+  
+  this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
+}
+
   
   // Renderizar billboard
   drawBillboard(billboard) {
@@ -1296,6 +1523,7 @@ drawBlocksInstanced(tileType, instances, camera) {
   
   // Método principal de render
   render(independentObjects = [], renderSky = true) {
+    this.time += 0.016;
     let camera = this.camera;
     this.lastCamera = camera; //
     this.updateTrigCache(camera);
@@ -1358,7 +1586,19 @@ drawBlocksInstanced(tileType, instances, camera) {
         
         this.gl.depthMask(true);
         this.gl.disable(this.gl.BLEND);
-      }
+      }else if (obj.type === 'ramp') {
+  if (batchInstances.length > 0) {
+    this.drawBlocksInstanced(currentTile, batchInstances, camera);
+    batchInstances = [];
+    currentTile = null;
+  }
+  
+  this.gl.enable(this.gl.DEPTH_TEST);
+  this.gl.depthMask(true);
+  this.gl.disable(this.gl.BLEND);
+  
+  this.drawRamp(obj, camera);
+}
     }
     
     // Renderizar batch final
@@ -1444,6 +1684,493 @@ drawBlocksInstanced(tileType, instances, camera) {
   transformNumber(n){
     return Number(n).toFixed(1);
   }
+  //rampas :
+getRampType(x, y, currentHeight) {
+  const neighbors = this.getNeighborHeights(x, y);
+  const heightDiffs = {
+    north: neighbors.north - currentHeight,
+    east: neighbors.east - currentHeight,
+    south: neighbors.south - currentHeight,
+    west: neighbors.west - currentHeight
+  };
+  
+  const highSides = [];
+  const lowSides = [];
+  
+  Object.keys(heightDiffs).forEach(dir => {
+    if (heightDiffs[dir] === 1) highSides.push(dir);
+    if (heightDiffs[dir] === -1) lowSides.push(dir);
+  });
+  
+  if (highSides.length + lowSides.length === 0) return { type: this.RAMP_TYPES.NONE };
+  
+  // RAMPA ASCENDENTE: 1 lado alto
+  if (highSides.length === 1 && lowSides.length === 0) {
+    return { 
+      type: this.RAMP_TYPES.STRAIGHT, 
+      direction: highSides[0],
+      ascending: true 
+    };
+  }
+  
+  // RAMPA DESCENDENTE: 1 lado bajo (NUEVA - solo para rampas rectas)
+  if (lowSides.length === 1 && highSides.length === 0) {
+    return { 
+      type: this.RAMP_TYPES.STRAIGHT, 
+      direction: lowSides[0],
+      ascending: false  // ← Esta es descendente
+    };
+  }
+  
+  // ESQUINA EXTERIOR: 2 lados altos adyacentes
+  if (highSides.length === 2 && lowSides.length === 0) {
+    const adjacent = this.areAdjacent(highSides[0], highSides[1]);
+    if (adjacent) {
+      return { 
+        type: this.RAMP_TYPES.OUTER_CORNER, 
+        corner: this.getCornerName(highSides),
+        ascending: true 
+      };
+    }
+  }
+  
+  // ESQUINA INTERIOR: 2 lados bajos adyacentes  
+  if (lowSides.length === 2 && highSides.length === 0) {
+    const adjacent = this.areAdjacent(lowSides[0], lowSides[1]);
+    if (adjacent) {
+      return { 
+        type: this.RAMP_TYPES.INNER_CORNER, 
+        corner: this.getCornerName(lowSides),
+        ascending: false 
+      };
+    }
+  }
+  
+  return { type: this.RAMP_TYPES.NONE };
+}
+
+
+getNeighborHeights(x, y) {
+  const getHeight = (nx, ny) => {
+    if (nx < 0 || ny < 0 || nx >= this.MAP_WIDTH || ny >= this.MAP_HEIGHT) {
+      return 0;
+    }
+    const idx = ny * this.MAP_WIDTH + nx;
+    return this.heightMap ? (this.heightMap[idx] || 0) : 0;
+  };
+  
+  return {
+    north: getHeight(x, y - 1),
+    east: getHeight(x + 1, y),
+    south: getHeight(x, y + 1),
+    west: getHeight(x - 1, y)
+  };
+}
+
+areAdjacent(dir1, dir2) {
+  const adjacentPairs = [
+    ['north', 'east'], ['east', 'south'], 
+    ['south', 'west'], ['west', 'north']
+  ];
+  
+  return adjacentPairs.some(pair => 
+    (pair[0] === dir1 && pair[1] === dir2) || 
+    (pair[1] === dir1 && pair[0] === dir2)
+  );
+}
+
+getCornerName(dirs) {
+  const set = new Set(dirs);
+  
+  // La esquina está donde se JUNTAN los dos lados, no en el lado opuesto
+  
+  // Si tenemos north + east → esquina en northeast (donde se juntan)
+  if (set.has('north') && set.has('east')) return 'northeast';
+  
+  // Si tenemos south + east → esquina en southeast (donde se juntan)
+  if (set.has('south') && set.has('east')) return 'southeast';
+  
+  // Si tenemos south + west → esquina en southwest (donde se juntan)
+  if (set.has('south') && set.has('west')) return 'southwest';
+  
+  // Si tenemos north + west → esquina en northwest (donde se juntan)
+  if (set.has('north') && set.has('west')) return 'northwest';
+  
+  return 'northeast'; // Fallback
+}
+
+// ============================================
+// 3. GEOMETRÍA DE RAMPAS
+// ============================================
+
+getRampVertices(rampInfo) {
+  // Retorna vértices personalizados según el tipo de rampa
+  const { type, direction, corner, ascending } = rampInfo;
+  
+  if (type === this.RAMP_TYPES.STRAIGHT) {
+    return this.getStraightRampVertices(direction, ascending);
+  } else if (type === this.RAMP_TYPES.INNER_CORNER) {
+    return this.getInnerCornerRampVertices(corner, ascending);
+  } else if (type === this.RAMP_TYPES.OUTER_CORNER) {
+    return this.getOuterCornerRampVertices(corner, ascending);
+  }
+  
+  return null;
+}
+
+getStraightRampVertices(direction, ascending) {
+  // Rampa recta: rampa sube en la dirección especificada
+  // north = sube hacia Y-, east = sube hacia X+, south = sube hacia Y+, west = sube hacia X-
+  
+const rotations = {
+  north: 180,    // ←bien
+  east: 270,    // ← Cambiar
+  south: 0,  // ← Cambiar
+  west: 90    // ← Cambiar
+};
+  
+  const angle = (rotations[direction] || 0) * Math.PI / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  
+  const rotate = (x, z) => ({
+    x: x * cos - z * sin,
+    z: x * sin + z * cos
+  });
+  
+  // Vertices base: rampa con lado bajo en Z+ (0.0) y lado alto en Z- (1.0)
+  const verts = [];
+  
+  // Cara inclinada (6 vértices = 2 triángulos)
+  const normal = { x: 0, y: 0.7071, z: 0.7071 };
+  verts.push(
+    -0.5, 0.0,  0.5,  0, 0,  normal.x, normal.y, normal.z,
+     0.5, 0.0,  0.5,  1, 0,  normal.x, normal.y, normal.z,
+     0.5, 1.0, -0.5,  1, 1,  normal.x, normal.y, normal.z,
+    
+    -0.5, 0.0,  0.5,  0, 0,  normal.x, normal.y, normal.z,
+     0.5, 1.0, -0.5,  1, 1,  normal.x, normal.y, normal.z,
+    -0.5, 1.0, -0.5,  0, 1,  normal.x, normal.y, normal.z
+  );
+  
+  // Cara trasera vertical (lado alto)
+  verts.push(
+     0.5, 1.0, -0.5,  1, 1,  0, 0, -1,
+    -0.5, 1.0, -0.5,  0, 1,  0, 0, -1,
+    -0.5, 0.0, -0.5,  0, 0,  0, 0, -1,
+    
+     0.5, 1.0, -0.5,  1, 1,  0, 0, -1,
+    -0.5, 0.0, -0.5,  0, 0,  0, 0, -1,
+     0.5, 0.0, -0.5,  1, 0,  0, 0, -1
+  );
+  
+  // Cara izquierda (triángulo)
+  verts.push(
+    -0.5, 0.0, -0.5,  0, 1,  -1, 0, 0,
+    -0.5, 1.0, -0.5,  0, 1,  -1, 0, 0,
+    -0.5, 0.0,  0.5,  1, 0,  -1, 0, 0
+  );
+  
+  // Cara derecha (triángulo)
+  verts.push(
+     0.5, 0.0,  0.5,  0, 0,  1, 0, 0,
+     0.5, 1.0, -0.5,  1, 1,  1, 0, 0,
+     0.5, 0.0, -0.5,  1, 0,  1, 0, 0
+  );
+  
+  // Cara inferior
+  verts.push(
+    -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
+     0.5, 0.0, -0.5,  1, 0,  0, -1, 0,
+     0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
+    
+    -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
+     0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
+    -0.5, 0.0,  0.5,  0, 1,  0, -1, 0
+  );
+  
+  // Rotar todos los vértices según la dirección
+  const rotated = [];
+  for (let i = 0; i < verts.length; i += 8) {
+    const pos = rotate(verts[i], verts[i + 2]);
+    rotated.push(
+      pos.x, verts[i + 1], pos.z,  // Posición rotada
+      verts[i + 3], verts[i + 4],  // UV
+      verts[i + 5], verts[i + 6], verts[i + 7]  // Normales (sin rotar por simplicidad)
+    );
+  }
+  
+  return new Float32Array(rotated);
+}
+
+
+getInnerCornerRampVertices(corner, ascending) {
+  // Esquina interior: rampa diagonal
+  // El vértice alto está en la esquina especificada
+  
+// En getInnerCornerRampVertices() - CAMBIAR a:
+const rotations = {
+  northeast: 180,
+  southeast: 270,  // ← bien
+  southwest: 0,  //<-- bien
+  northwest: 90   // ← Todo en 0
+};
+  
+  const angle = (rotations[corner] || 0) * Math.PI / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  
+  const rotate = (x, z) => ({
+    x: x * cos - z * sin,
+    z: x * sin + z * cos
+  });
+  
+  // Base: esquina interior con vértice alto en (+0.5, -0.5)
+  const verts = [];
+  const normalDiag = { x: 0.577, y: 0.577, z: 0.577 };
+  
+  // Cara inclinada diagonal principal (2 triángulos)
+  verts.push(
+    // Triángulo 1
+    -0.5, 0.0, -0.5,  0, 0,  normalDiag.x, normalDiag.y, normalDiag.z,
+    -0.5, 0.0,  0.5,  0, 1,  normalDiag.x, normalDiag.y, normalDiag.z,
+     0.5, 1.0, -0.5,  1, 1,  normalDiag.x, normalDiag.y, normalDiag.z,
+    
+    // Triángulo 2
+    -0.5, 0.0,  0.5,  0, 1,  normalDiag.x, normalDiag.y, normalDiag.z,
+     0.5, 0.0,  0.5,  1, 0,  normalDiag.x, normalDiag.y, normalDiag.z,
+     0.5, 1.0, -0.5,  1, 1,  normalDiag.x, normalDiag.y, normalDiag.z
+  );
+  
+  // Cara vertical norte (Z-)
+  verts.push(
+     0.5, 1.0, -0.5,  1, 1,  0, 0, -1,
+    -0.5, 0.0, -0.5,  0, 0,  0, 0, -1,
+     0.5, 0.0, -0.5,  1, 0,  0, 0, -1
+  );
+  
+  // Cara vertical este (X+)
+  verts.push(
+     0.5, 0.0, -0.5,  0, 0,  1, 0, 0,
+     0.5, 1.0, -0.5,  0, 1,  1, 0, 0,
+     0.5, 0.0,  0.5,  1, 0,  1, 0, 0
+  );
+  
+  // Cara inferior
+  verts.push(
+    -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
+     0.5, 0.0, -0.5,  1, 0,  0, -1, 0,
+     0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
+    
+    -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
+     0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
+    -0.5, 0.0,  0.5,  0, 1,  0, -1, 0
+  );
+  
+  // Rotar según esquina
+  const rotated = [];
+  for (let i = 0; i < verts.length; i += 8) {
+    const pos = rotate(verts[i], verts[i + 2]);
+    rotated.push(
+      pos.x, verts[i + 1], pos.z,
+      verts[i + 3], verts[i + 4],
+      verts[i + 5], verts[i + 6], verts[i + 7]
+    );
+  }
+  
+  return new Float32Array(rotated);
+}
+
+
+getOuterCornerRampVertices(corner, ascending) {
+  // Esquina exterior: rampa convexa (pirámide invertida)
+  // El vértice bajo está en la esquina especificada
+  //TODO
+  const rotations = {
+    northeast: 180,   // ← Cambiar de 90
+    southeast: 270,   // ← Cambiar de 90
+    southwest: 0,     // ← Cambiar de 90
+    northwest: 90     // ← Mantener
+  };
+  
+  const angle = (rotations[corner] || 0) * Math.PI / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  
+  const rotate = (x, z) => ({
+    x: x * cos - z * sin,
+    z: x * sin + z * cos
+  });
+  
+  // Base: esquina exterior con vértice bajo en (+0.5, -0.5, 0.0)
+  const verts = [];
+  const normalNE = { x: 0.577, y: 0.577, z: -0.577 };
+  const normalNW = { x: -0.577, y: 0.577, z: -0.577 };
+  
+  // Cara inclinada norte (Z-) - triángulo
+  verts.push(
+    -0.5, 1.0, -0.5,  0, 1,  0, 0.7071, -0.7071,
+     0.5, 0.0, -0.5,  1, 0,  0, 0.7071, -0.7071,
+     0.5, 1.0, -0.5,  1, 1,  0, 0.7071, -0.7071
+  );
+  
+  // Cara inclinada este (X+) - triángulo
+  verts.push(
+     0.5, 1.0, -0.5,  1, 1,  0.7071, 0.7071, 0,
+     0.5, 0.0, -0.5,  1, 0,  0.7071, 0.7071, 0,
+     0.5, 1.0,  0.5,  0, 1,  0.7071, 0.7071, 0
+  );
+  
+  // Cara inclinada diagonal - triángulo
+  verts.push(
+     0.5, 0.0, -0.5,  1, 0,  normalNE.x, normalNE.y, normalNE.z,
+    -0.5, 1.0, -0.5,  0, 1,  normalNE.x, normalNE.y, normalNE.z,
+     0.5, 1.0,  0.5,  1, 1,  normalNE.x, normalNE.y, normalNE.z
+  );
+  
+  // Cara vertical sur (Z+)
+  verts.push(
+    -0.5, 1.0, -0.5,  0, 1,  0, 0, 1,
+    -0.5, 1.0,  0.5,  0, 1,  0, 0, 1,
+     0.5, 1.0,  0.5,  1, 1,  0, 0, 1
+  );
+  
+  // Cara vertical oeste (X-)
+  verts.push(
+    -0.5, 1.0,  0.5,  1, 1,  -1, 0, 0,
+    -0.5, 1.0, -0.5,  0, 1,  -1, 0, 0,
+    -0.5, 0.0, -0.5,  0, 0,  -1, 0, 0
+  );
+  
+  // Cara superior (techo plano)
+  verts.push(
+    -0.5, 1.0, -0.5,  0, 0,  0, 1, 0,
+     0.5, 1.0,  0.5,  1, 1,  0, 1, 0,
+    -0.5, 1.0,  0.5,  0, 1,  0, 1, 0,
+    
+    -0.5, 1.0, -0.5,  0, 0,  0, 1, 0,
+     0.5, 1.0, -0.5,  1, 0,  0, 1, 0,
+     0.5, 1.0,  0.5,  1, 1,  0, 1, 0
+  );
+  
+  // Cara inferior
+  verts.push(
+    -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
+     0.5, 0.0, -0.5,  1, 0,  0, -1, 0,
+     0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
+    
+    -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
+     0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
+    -0.5, 0.0,  0.5,  0, 1,  0, -1, 0
+  );
+  
+  // Rotar según esquina
+  const rotated = [];
+  for (let i = 0; i < verts.length; i += 8) {
+    const pos = rotate(verts[i], verts[i + 2]);
+    rotated.push(
+      pos.x, verts[i + 1], pos.z,
+      verts[i + 3], verts[i + 4],
+      verts[i + 5], verts[i + 6], verts[i + 7]
+    );
+  }
+  
+  return new Float32Array(rotated);
+}
+
+drawRamp(ramp, camera) {
+  // Crear geometría específica para esta rampa
+  const rampVertices = this.getRampVertices(ramp.rampInfo);
+  if (!rampVertices) return;
+  
+  this.gl.useProgram(this.blockProgram);
+    this.gl.disable(this.gl.CULL_FACE);
+
+  
+  // Buffer temporal para esta rampa - IMPORTANTE: vincular ANTES de configurar atributos
+  const tempBuffer = this.gl.createBuffer();
+  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, tempBuffer);
+  this.gl.bufferData(this.gl.ARRAY_BUFFER, rampVertices, this.gl.DYNAMIC_DRAW);
+  
+  // Configurar atributos con el buffer temporal ya vinculado
+  // Stride = 32 bytes (3 floats pos + 2 floats UV + 3 floats normal = 8 floats * 4 bytes)
+  this.gl.enableVertexAttribArray(this.attribLocations.block.position);
+  this.gl.vertexAttribPointer(this.attribLocations.block.position, 3, this.gl.FLOAT, false, 32, 0);
+  
+  this.gl.enableVertexAttribArray(this.attribLocations.block.texCoord);
+  this.gl.vertexAttribPointer(this.attribLocations.block.texCoord, 2, this.gl.FLOAT, false, 32, 12);
+  
+  this.gl.enableVertexAttribArray(this.attribLocations.block.normal);
+  this.gl.vertexAttribPointer(this.attribLocations.block.normal, 3, this.gl.FLOAT, false, 32, 20);
+  
+  // Resetear divisor para estos atributos (no son instanciados)
+  this.gl.vertexAttribDivisor(this.attribLocations.block.position, 0);
+  this.gl.vertexAttribDivisor(this.attribLocations.block.texCoord, 0);
+  this.gl.vertexAttribDivisor(this.attribLocations.block.normal, 0);
+  
+  // Ahora configurar el instance buffer
+  //const height = ramp.targetHeight - ramp.baseHeight;
+const instanceData = new Float32Array([
+  ramp.x, ramp.y, ramp.z, ramp.targetHeight - ramp.baseHeight
+]);
+  
+  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.instanceBuffer);
+  this.gl.bufferData(this.gl.ARRAY_BUFFER, instanceData, this.gl.DYNAMIC_DRAW);
+  
+  this.gl.enableVertexAttribArray(this.attribLocations.block.instanceData);
+  this.gl.vertexAttribPointer(this.attribLocations.block.instanceData, 4, this.gl.FLOAT, false, 16, 0);
+  this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 1);
+  
+  // Uniforms
+  this.gl.uniform4f(this.uniformLocations.block.camera, camera.x, camera.y, camera.z, camera.angle);
+  this.gl.uniform2f(this.uniformLocations.block.resolution, this.canvas.width, this.canvas.height);
+  this.gl.uniform1i(this.uniformLocations.block.spriteIndex, ramp.tile);
+  this.gl.uniform1f(this.uniformLocations.block.spriteCount, this.tile_items_size);
+  
+  // Iluminación y niebla
+  this.gl.uniform1i(this.uniformLocations.block.illumination, this.ILLUMINATION);
+  this.gl.uniform1f(this.uniformLocations.block.ambient, this.AMBIENT_LIGHT);
+  this.gl.uniform1f(this.uniformLocations.block.diffuse, this.LIGHT_DIFFUSE);
+  
+  const len = Math.sqrt(this.lightDir[0]*this.lightDir[0] + this.lightDir[1]*this.lightDir[1] + this.lightDir[2]*this.lightDir[2]);
+  this.gl.uniform3f(this.uniformLocations.block.lightDir, this.lightDir[0]/len, this.lightDir[1]/len, this.lightDir[2]/len);
+  
+  this.gl.activeTexture(this.gl.TEXTURE0);
+  this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
+  this.gl.uniform1i(this.uniformLocations.block.spritesheet, 0);
+  
+  this.gl.uniform1i(this.uniformLocations.block.fogEnabled, this.FOG_ENABLED);
+  this.gl.uniform1f(this.uniformLocations.block.fogStart, this.FOG_START);
+  this.gl.uniform1f(this.uniformLocations.block.fogEnd, this.FOG_END);
+  this.gl.uniform3f(this.uniformLocations.block.fogColor, 
+    this.FOG_COLOR[0], this.FOG_COLOR[1], this.FOG_COLOR[2]);
+  
+  // Dibujar
+  const vertexCount = rampVertices.length / 8; // 8 floats por vértice
+  this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, vertexCount, 1);
+  
+  // CRÍTICO: Limpiar TODOS los atributos y divisores
+  this.gl.disableVertexAttribArray(this.attribLocations.block.position);
+  this.gl.disableVertexAttribArray(this.attribLocations.block.texCoord);
+  this.gl.disableVertexAttribArray(this.attribLocations.block.normal);
+  this.gl.disableVertexAttribArray(this.attribLocations.block.instanceData);
+  this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 0);
+  
+  this.gl.deleteBuffer(tempBuffer);
+}
+setWaterTiles(tiles) {
+  this.water_tiles = tiles;
+  this.water_tiles_set = new Set(tiles);
+}
+
+setWaterAnimation(speed, wave) {
+  this.WATER_SPEED = speed;
+  this.WATER_WAVE = wave;
+}
+
+isWaterTile(tile) {
+  return this.water_tiles_set.has(tile);
+}
 
 
 }

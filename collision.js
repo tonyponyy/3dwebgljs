@@ -3,12 +3,13 @@
 const COLLISION_CONFIG = {
   PLAYER_RADIUS: 0.3,
   STEP_HEIGHT: 0.5,  // Altura máxima que puede subir sin saltar
-  GROUND_CHECK_DISTANCE: 1
+  GROUND_CHECK_DISTANCE: 0.2
 };
 
 /**
  * Obtiene la altura del terreno en una posición específica
  */
+
 function getTerrainHeight(x, y, tileMap, independentObjects) {
   let maxHeight = 0;
   
@@ -20,11 +21,14 @@ function getTerrainHeight(x, y, tileMap, independentObjects) {
     const index = tileY * MAP_WIDTH + tileX;
     const tile = tileMap[index];
     
-    if (tile !== 0) {
-      // Si es un bloque, obtener su altura
-      if (block_tiles.includes(tile)) {
-        maxHeight = tile_heights[tile] || 0;
-      }
+    // ← NUEVO: Primero leer del heightMap (ei)
+    if (typeof ei !== 'undefined' && ei && ei[index] !== undefined) {
+      maxHeight = ei[index];
+    }
+    
+    // Si es un bloque específico (35-38), SUMAR su altura al heightMap
+    if (tile !== 0 && block_tiles.includes(tile)) {
+      maxHeight += (tile_heights[tile] || 0);
     }
   }
   
@@ -38,13 +42,16 @@ function getTerrainHeight(x, y, tileMap, independentObjects) {
     
     // Si está dentro del bloque
     if (distance < 0.5) {
-      const height = tile_heights[obj.tile] || 0;
+      const height = obj.z + (tile_heights[obj.tile] || 0); // ← Cambiado: usar obj.z
       maxHeight = Math.max(maxHeight, height);
     }
   }
   
   return maxHeight;
 }
+
+
+
 
 /**
  * Verifica colisión circular con objetos
@@ -127,12 +134,49 @@ function checkCollision(x, y, playerZ, radius, tileMap, independentObjects, skip
 /**
  * Resuelve colisiones empujando al jugador fuera
  */
-function resolveCollisions(x, y, z, radius, tileMap, independentObjects) {
+const MAX_CLIMB_HEIGHT = 1;
+
+
+function resolveCollisions(
+  x, y, z,
+  radius,
+  tileMap,
+  independentObjects,
+  prevX,
+  prevY
+) {
+  const MAX_CLIMB_HEIGHT = 1;
+
   let newX = x;
   let newY = y;
-  
-  const collisions = checkCollision(x, y, z, radius, tileMap, independentObjects);
-  
+
+  // ================= ALTURA DEL TERRENO DESTINO =================
+  const targetHeight = getTerrainHeight(
+    x,
+    y,
+    tileMap,
+    independentObjects
+  );
+
+  // ================= BLOQUEO POR DESNIVEL (USANDO z REAL) =================
+  if (targetHeight > z + MAX_CLIMB_HEIGHT) {
+    return {
+      x: prevX,
+      y: prevY,
+      blocked: true
+    };
+  }
+
+  // ================= COLISIÓN LATERAL =================
+  const collisions = checkCollision(
+    x,
+    y,
+    z,
+    radius,
+    tileMap,
+    independentObjects
+  );
+
   for (const collision of collisions) {
     const overlap = (radius + 0.5) - collision.distance;
     if (overlap > 0) {
@@ -140,9 +184,15 @@ function resolveCollisions(x, y, z, radius, tileMap, independentObjects) {
       newY += collision.normal.y * overlap;
     }
   }
-  
-  return { x: newX, y: newY };
+
+  return {
+    x: newX,
+    y: newY,
+    blocked: false
+  };
 }
+
+
 
 /**
  * Verifica si el jugador está en el suelo
