@@ -3,8 +3,8 @@
 //  ██  ▄▄▄ ██    ██   ██     ██   ██▄▄  ██▄█▄   ▄██▀ ██▄▄   ███▄██ ██ ▄▄ ██ ███▄██ ██▄▄  V.0.0.1 alpha
 //   ▀███▀  ██▄▄▄ ██   ██     ██   ██▄▄▄ ██ ██  ██▀   ██▄▄▄▄ ██ ▀██ ▀███▀ ██ ██ ▀██ ██▄▄▄  By TonyPonyy
                                                                                       
-//constantes
-
+    //constantes
+    const BILLBOARD_MINIM_SIZE = 0.01
     const FOG_ENABLED_DEFAULT = true;
     const FOG_START_DEFAULT = 30;
     const FOG_END_DEFAULT = 80;
@@ -128,7 +128,8 @@ class Glitter7engine {
       this.FOG_END =  FOG_END_DEFAULT;      // Distancia donde es niebla completa
       this.FOG_COLOR = this.color1; // Color de la niebla
     }
-
+      //this.billboardInstanceData = null; // Se inicializa dinámicamente según necesidad
+      //this.maxBillboardInstances = 20; // Aumentar si tienes más billboards
 
     // WebGL Context
     let contextOptions = this.canvas.getContext('webgl2', {
@@ -163,6 +164,7 @@ class Glitter7engine {
   console.log('WebGL Version:', this.gl.getParameter(this.gl.VERSION));
   console.log('WebGL Vendor:', this.gl.getParameter(this.gl.VENDOR));
   console.log('WebGL Renderer:', this.gl.getParameter(this.gl.RENDERER));
+  
     
     // Estado interno
     this.tile_items_size = 6;
@@ -398,8 +400,12 @@ getGroundFS() {
   getBillboardVS() {
   return `#version 300 es
   in vec2 a_offset;
-  in vec4 a_instanceData; // x, y, size, scale
-  out vec2 v_texCoord;
+  //optim
+  in vec4 a_instanceData; // x, y, size
+  in float a_spriteIndex;
+
+  flat out int v_spriteIndex;  out vec2 v_texCoord;
+  
   out float v_distance; // Para fog
   
   uniform vec4 u_camera;
@@ -438,6 +444,8 @@ getBillboardFS() {
     uv.y = 1.0 - uv.y;
     uv.x /= u_spriteCount;
     uv.x += float(u_spriteIndex - 1) / u_spriteCount;
+    uv = clamp(uv, 0.0, 1.0);
+
     vec4 color = texture(u_spritesheet, uv);
     if (color.a < 0.1) discard;
     
@@ -817,7 +825,7 @@ billboard: {
         this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
         this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST); 
 
       //this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_LINEAR); // Mejor calidad
@@ -997,8 +1005,6 @@ getRotatedBillboardSprite(baseTile, cameraAngle, billboardX, billboardY, fixedOr
   // Retornar el tile base + offset del sprite correcto
   return baseTile + spriteOffset;
 }
-  
-  // Recolectar objetos renderizables
 collectRenderableObjects(camera, independentObjects = []) {
   this.objectCount = 0;
   const camX = camera.x;
@@ -1010,6 +1016,9 @@ collectRenderableObjects(camera, independentObjects = []) {
   const maxX = Math.min(this.MAP_WIDTH - 1, Math.ceil(camX + maxDist));
   const minY = Math.max(0, Math.floor(camY - maxDist));
   const maxY = Math.min(this.MAP_HEIGHT - 1, Math.ceil(camY + maxDist));
+  
+  // ✅ OPTIMIZACIÓN 6: Pre-calcular sprite rotado para billboards
+  const billboardCache = new Map(); // Cachear cálculos de sprites rotados
   
   if (this.tileMap) {
     for (let mapY = minY; mapY <= maxY; mapY++) {
@@ -1036,223 +1045,216 @@ collectRenderableObjects(camera, independentObjects = []) {
         const heightMapValue = this.heightMap ? (this.heightMap[i] || 0.0) : 0.0;
         
         if (this.isBillboard(tile)) {
-  // Billboards: detectar si necesitan rampa en el suelo
-  const groundElevation = heightMapValue;
-  const groundTile = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
-  
-  // Intentar crear rampa para el suelo del billboard
-  let groundIsRamp = false;
-  let finalGroundHeight = groundElevation; // Altura final del suelo
-  
-  if (this.RAMP_ENABLED && groundElevation > 0 && groundTile !== 0) {
-    const rampInfo = this.getRampType(mapX, mapY, groundElevation);
-    
-    if (rampInfo.type !== this.RAMP_TYPES.NONE) {
-      const neighbors = this.getNeighborHeights(mapX, mapY);
-      const baseHeight = Math.min(
-        neighbors.north,
-        neighbors.east,
-        neighbors.south,
-        neighbors.west
-      );
-      
-      // Bloque base si hay altura base
-         const targetHeight = groundElevation;
-    if (targetHeight - baseHeight === 1) {  
-      if (baseHeight > 0) {
-        this.tempObjects[this.objectCount++] = {
-          type: 'block',
-          x: worldX,
-          y: 0.0,
-          z: worldY,
-          tile: groundTile,
-          dist: distSq,
-          customHeight: baseHeight
-        };
-      }
-      
-      // Rampa encima
-      this.tempObjects[this.objectCount++] = {
-        type: 'ramp',
-        x: worldX,
-        y: baseHeight,
-        z: worldY,
-        tile: groundTile,
-        dist: distSq,
-        rampInfo: rampInfo,
-        baseHeight: baseHeight,
-        targetHeight: groundElevation
-      };
-      groundIsRamp = true;
-      // Si es rampa, la altura final es groundElevation (ya incluida en la rampa)
-      finalGroundHeight = groundElevation;
-    }
-  }
-  }
-  
-  // Si no es rampa pero tiene elevación, crear bloque base
-  if (!groundIsRamp && groundElevation > 0 && groundTile !== 0) {
-    this.tempObjects[this.objectCount++] = {
-      type: 'block',
-      x: worldX,
-      y: 0.0,
-      z: worldY,
-      tile: groundTile,
-      dist: distSq,
-      customHeight: groundElevation
-    };
-    // Si es bloque y el bloque tiene altura propia, sumarla
-    const blockHeight = this.isBlock(groundTile) ? (this.tile_heights[groundTile] || 0.0) : 0.0;
-    finalGroundHeight = groundElevation + blockHeight;
-  }
-  
-  // Renderizar billboard encima (usar finalGroundHeight)
-  const proj = this.projectToScreenWithHeight(worldX, worldY, finalGroundHeight, camera);
-  if (proj.visible) {
-    let finalTile = tile;
-    if (this.isRotatableBillboard(tile)) {
-      finalTile = this.getRotatedBillboardSprite(tile, camera.angle, worldX, worldY, null);
-    }
-    
-    const scale = this.billboard_scales[tile] || 1.0;
-    
-    this.tempObjects[this.objectCount++] = {
-      type: 'billboard',
-      x: worldX,
-      y: worldY,
-      tile: finalTile,
-      dist: distSq,
-      proj,
-      scale: scale
-    };
-  }
-} else if (this.isBlock(tile)) {
-  if (this.RAMP_ENABLED && heightMapValue > 0) {
-const rampInfo = this.getRampType(mapX, mapY, heightMapValue);
+          // Billboards: detectar si necesitan rampa en el suelo
+          const groundElevation = heightMapValue;
+          const groundTile = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
+          
+          let groundIsRamp = false;
+          let finalGroundHeight = groundElevation;
+          
+          if (this.RAMP_ENABLED && groundElevation > 0 && groundTile !== 0) {
+            const rampInfo = this.getRampType(mapX, mapY, groundElevation);
+            
+            if (rampInfo.type !== this.RAMP_TYPES.NONE) {
+              const neighbors = this.getNeighborHeights(mapX, mapY);
+              const baseHeight = Math.min(
+                neighbors.north,
+                neighbors.east,
+                neighbors.south,
+                neighbors.west
+              );
+              
+              const targetHeight = groundElevation;
+              if (targetHeight - baseHeight === 1) {  
+                if (baseHeight > 0) {
+                  this.tempObjects[this.objectCount++] = {
+                    type: 'block',
+                    x: worldX,
+                    y: 0.0,
+                    z: worldY,
+                    tile: groundTile,
+                    dist: distSq,
+                    customHeight: baseHeight
+                  };
+                }
+                
+                this.tempObjects[this.objectCount++] = {
+                  type: 'ramp',
+                  x: worldX,
+                  y: baseHeight,
+                  z: worldY,
+                  tile: groundTile,
+                  dist: distSq,
+                  rampInfo: rampInfo,
+                  baseHeight: baseHeight,
+                  targetHeight: groundElevation
+                };
+                groundIsRamp = true;
+                finalGroundHeight = groundElevation;
+              }
+            }
+          }
+          
+          if (!groundIsRamp && groundElevation > 0 && groundTile !== 0) {
+            this.tempObjects[this.objectCount++] = {
+              type: 'block',
+              x: worldX,
+              y: 0.0,
+              z: worldY,
+              tile: groundTile,
+              dist: distSq,
+              customHeight: groundElevation
+            };
+            const blockHeight = this.isBlock(groundTile) ? (this.tile_heights[groundTile] || 0.0) : 0.0;
+            finalGroundHeight = groundElevation + blockHeight;
+          }
+          
+          // ✅ OPTIMIZACIÓN 7: Calcular projection una sola vez
+          const proj = this.projectToScreenWithHeight(worldX, worldY, finalGroundHeight, camera);
+          if (proj.size < BILLBOARD_MINIM_SIZE) continue;
 
-if (rampInfo.type !== this.RAMP_TYPES.NONE) {
-  const neighbors = this.getNeighborHeights(mapX, mapY);
+          if (proj.visible) {
+            // Cachear cálculo de sprite rotado
+            let finalTile = tile;
+            if (this.isRotatableBillboard(tile)) {
+              const cacheKey = `${tile}_${Math.floor(camera.angle * 100)}`;
+              if (!billboardCache.has(cacheKey)) {
+                billboardCache.set(cacheKey, this.getRotatedBillboardSprite(tile, camera.angle, worldX, worldY, null));
+              }
+              finalTile = billboardCache.get(cacheKey);
+            }
+            
+            const scale = this.billboard_scales[tile] || 1.0;
+            
+            this.tempObjects[this.objectCount++] = {
+              type: 'billboard',
+              x: worldX,
+              y: worldY,
+              tile: finalTile,
+              dist: distSq,
+              proj,
+              scale: scale
+            };
+          }
+        } else if (this.isBlock(tile)) {
+          if (this.RAMP_ENABLED && heightMapValue > 0) {
+            const rampInfo = this.getRampType(mapX, mapY, heightMapValue);
 
-  const baseHeight = Math.min(
-    neighbors.north,
-    neighbors.east,
-    neighbors.south,
-    neighbors.west
-  );
+            if (rampInfo.type !== this.RAMP_TYPES.NONE) {
+              const neighbors = this.getNeighborHeights(mapX, mapY);
 
-  const targetHeight = heightMapValue;
+              const baseHeight = Math.min(
+                neighbors.north,
+                neighbors.east,
+                neighbors.south,
+                neighbors.west
+              );
 
-  // Validación mínima
-  if (targetHeight - baseHeight === 1) {
-    if (baseHeight > 0) {
-      this.tempObjects[this.objectCount++] = {
-        type: 'block',
-        x: worldX,
-        y: 0.0,
-        z: worldY,
-        tile,
-        dist: distSq,
-        customHeight: baseHeight
-      };
-    }
+              const targetHeight = heightMapValue;
 
-    this.tempObjects[this.objectCount++] = {
-      type: 'ramp',
-      x: worldX,
-      y: baseHeight,
-      z: worldY,
-      tile,
-      dist: distSq,
-      rampInfo,
-      baseHeight,
-      targetHeight
-    };
+              if (targetHeight - baseHeight === 1) {
+                if (baseHeight > 0) {
+                  this.tempObjects[this.objectCount++] = {
+                    type: 'block',
+                    x: worldX,
+                    y: 0.0,
+                    z: worldY,
+                    tile,
+                    dist: distSq,
+                    customHeight: baseHeight
+                  };
+                }
 
-    continue;
-  }
-}
+                this.tempObjects[this.objectCount++] = {
+                  type: 'ramp',
+                  x: worldX,
+                  y: baseHeight,
+                  z: worldY,
+                  tile,
+                  dist: distSq,
+                  rampInfo,
+                  baseHeight,
+                  targetHeight
+                };
 
-  }
-  
-  // Bloque normal (sin cambios)
-  const customHeight = (heightMapValue > 0) ? heightMapValue : null;
-  this.tempObjects[this.objectCount++] = {
-    type: 'block',
-    x: worldX,
-    y: 0.0,
-    z: worldY,
-    tile,
-    dist: distSq,
-    customHeight: customHeight
-  };
-} else {
+                continue;
+              }
+            }
+          }
+          
+          const customHeight = (heightMapValue > 0) ? heightMapValue : null;
+          this.tempObjects[this.objectCount++] = {
+            type: 'block',
+            x: worldX,
+            y: 0.0,
+            z: worldY,
+            tile,
+            dist: distSq,
+            customHeight: customHeight
+          };
+        } else {
           // Tile de suelo - detectar si debe convertirse en rampa o bloque
-         if (heightMapValue > 0) {
-    if (this.RAMP_ENABLED) {
-    const rampInfo = this.getRampType(mapX, mapY, heightMapValue);
+          if (heightMapValue > 0) {
+            if (this.RAMP_ENABLED) {
+              const rampInfo = this.getRampType(mapX, mapY, heightMapValue);
 
-if (rampInfo.type !== this.RAMP_TYPES.NONE) {
-  const neighbors = this.getNeighborHeights(mapX, mapY);
+              if (rampInfo.type !== this.RAMP_TYPES.NONE) {
+                const neighbors = this.getNeighborHeights(mapX, mapY);
 
-  const baseHeight = Math.min(
-    neighbors.north,
-    neighbors.east,
-    neighbors.south,
-    neighbors.west
-  );
+                const baseHeight = Math.min(
+                  neighbors.north,
+                  neighbors.east,
+                  neighbors.south,
+                  neighbors.west
+                );
 
-  const targetHeight = heightMapValue;
+                const targetHeight = heightMapValue;
 
-  // Validación mínima
-  if (targetHeight - baseHeight === 1) {
-    if (baseHeight > 0) {
-      this.tempObjects[this.objectCount++] = {
-        type: 'block',
-        x: worldX,
-        y: 0.0,
-        z: worldY,
-        tile,
-        dist: distSq,
-        customHeight: baseHeight
-      };
-    }
+                if (targetHeight - baseHeight === 1) {
+                  if (baseHeight > 0) {
+                    this.tempObjects[this.objectCount++] = {
+                      type: 'block',
+                      x: worldX,
+                      y: 0.0,
+                      z: worldY,
+                      tile,
+                      dist: distSq,
+                      customHeight: baseHeight
+                    };
+                  }
 
-    this.tempObjects[this.objectCount++] = {
-      type: 'ramp',
-      x: worldX,
-      y: baseHeight,
-      z: worldY,
-      tile,
-      dist: distSq,
-      rampInfo,
-      baseHeight,
-      targetHeight
-    };
+                  this.tempObjects[this.objectCount++] = {
+                    type: 'ramp',
+                    x: worldX,
+                    y: baseHeight,
+                    z: worldY,
+                    tile,
+                    dist: distSq,
+                    rampInfo,
+                    baseHeight,
+                    targetHeight
+                  };
 
-    continue;
-  }
-}
-
-    }
-    
-    // Convertir en bloque normal (sin cambios)
-    this.tempObjects[this.objectCount++] = {
-      type: 'block',
-      x: worldX,
-      y: 0.0,
-      z: worldY,
-      tile: tile,
-      dist: distSq,
-      customHeight: heightMapValue
-    };
-  }
-}
+                  continue;
+                }
+              }
+            }
+            
+            this.tempObjects[this.objectCount++] = {
+              type: 'block',
+              x: worldX,
+              y: 0.0,
+              z: worldY,
+              tile: tile,
+              dist: distSq,
+              customHeight: heightMapValue
+            };
+          }
         }
-      
+      }
     }
   }
 
-  
   // Objetos independientes
   for (const obj of independentObjects) {
     const worldX = obj.x;
@@ -1263,7 +1265,6 @@ if (rampInfo.type !== this.RAMP_TYPES.NONE) {
     const dy = worldY - camY;
     const distSq = dx * dx + dy * dy;
     
-    // Check distancia + frustum para objetos independientes
     if (distSq > maxDistSq) continue;
     
     const rotY = dx * this.cachedSinA + dy * this.cachedCosA;
@@ -1275,15 +1276,25 @@ if (rampInfo.type !== this.RAMP_TYPES.NONE) {
     
     if (this.isBillboard(obj.tile)) {
       const proj = this.projectToScreenWithHeight(worldX, worldY, height, camera);
+      if (proj.size < BILLBOARD_MINIM_SIZE) continue;
+
       if (proj.visible) {
-        // Calcular sprite rotado si aplica
         let finalTile = obj.tile;
         if (this.isRotatableBillboard(obj.tile)) {
           const fixedAngle = obj.orientation !== undefined ? obj.orientation : null;
-          finalTile = this.getRotatedBillboardSprite(obj.tile, camera.angle, worldX, worldY, fixedAngle);
+          
+          // ✅ Cachear también objetos independientes si no tienen orientación fija
+          if (fixedAngle === null) {
+            const cacheKey = `${obj.tile}_${Math.floor(camera.angle * 100)}`;
+            if (!billboardCache.has(cacheKey)) {
+              billboardCache.set(cacheKey, this.getRotatedBillboardSprite(obj.tile, camera.angle, worldX, worldY, null));
+            }
+            finalTile = billboardCache.get(cacheKey);
+          } else {
+            finalTile = this.getRotatedBillboardSprite(obj.tile, camera.angle, worldX, worldY, fixedAngle);
+          }
         }
         
-        // Obtener escala (del objeto, global por tile, o 1.0 por defecto)
         const scale = obj.scale !== undefined ? obj.scale : (this.billboard_scales[obj.tile] || 1.0);
         
         this.tempObjects[this.objectCount++] = {
@@ -1312,7 +1323,7 @@ if (rampInfo.type !== this.RAMP_TYPES.NONE) {
   objects.sort((a, b) => b.dist - a.dist);
   return objects;
 }
-  
+
   // Renderizar cielo
   renderSky() {
     this.gl.disable(this.gl.DEPTH_TEST);
@@ -1392,6 +1403,8 @@ createProjectionMatrix() {
 renderGround(camera) {
   this.gl.disable(this.gl.DEPTH_TEST);
   this.gl.enable(this.gl.BLEND);
+  //this.gl.disable(this.gl.BLEND);
+
   this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
   
   this.gl.useProgram(this.program);
@@ -1429,36 +1442,44 @@ renderGround(camera) {
 
 drawBillboardsInstanced(tileType, instances) {
   if (!instances || instances.length === 0) return;
-  
+
   this.gl.useProgram(this.billboardProgram);
   
-  // Preparar datos de instancia (x, y, size, scale)
-  const instanceData = new Float32Array(instances.length * 4);
-  for (let i = 0; i < instances.length; i++) {
-    instanceData[i * 4 + 0] = instances[i].proj.x;
-    instanceData[i * 4 + 1] = instances[i].proj.y;
-    instanceData[i * 4 + 2] = instances[i].proj.size;
-    instanceData[i * 4 + 3] = instances[i].scale || 1.0;
+  // ✅ OPTIMIZACIÓN 1: Reutilizar buffer si es lo suficientemente grande
+  const requiredSize = instances.length * 16; // 4 floats * 4 bytes
+  if (!this.billboardInstanceData || this.billboardInstanceData.byteLength < requiredSize) {
+    this.billboardInstanceData = new Float32Array(instances.length * 4);
   }
   
+  // ✅ OPTIMIZACIÓN 2: Llenar datos sin crear nuevo array cada frame
+  for (let i = 0; i < instances.length; i++) {
+    const offset = i * 4;
+    this.billboardInstanceData[offset + 0] = instances[i].proj.x;
+    this.billboardInstanceData[offset + 1] = instances[i].proj.y;
+    this.billboardInstanceData[offset + 2] = instances[i].proj.size;
+    this.billboardInstanceData[offset + 3] = instances[i].scale || 1.0;
+  }
+    this.gl.depthMask(false);
+    this.gl.disable(this.gl.BLEND);
+
   this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.billboardInstanceBuffer);
-  this.gl.bufferData(this.gl.ARRAY_BUFFER, instanceData, this.gl.DYNAMIC_DRAW);
+  // ✅ OPTIMIZACIÓN 3: Usar STREAM_DRAW para datos que cambian cada frame
+  this.gl.bufferData(this.gl.ARRAY_BUFFER, this.billboardInstanceData, this.gl.STREAM_DRAW);
   
-  // Configurar geometría base del billboard
+  // Configurar geometría base (esto puede moverse a initBuffers para hacerlo solo una vez)
   this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.billboardBuffer);
   this.gl.enableVertexAttribArray(this.attribLocations.billboard.offset);
   this.gl.vertexAttribPointer(this.attribLocations.billboard.offset, 2, this.gl.FLOAT, false, 0, 0);
   
   // Configurar atributos de instancia
   this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.billboardInstanceBuffer);
-  this.gl.enableVertexAttribArray(this.attribLocations.billboard.instanceData); // ← USAR attribLocations
+  this.gl.enableVertexAttribArray(this.attribLocations.billboard.instanceData);
   this.gl.vertexAttribPointer(this.attribLocations.billboard.instanceData, 4, this.gl.FLOAT, false, 16, 0);
   this.gl.vertexAttribDivisor(this.attribLocations.billboard.instanceData, 1);
   
-  // Uniforms (una sola vez para todo el batch)
+  // ✅ OPTIMIZACIÓN 4: Configurar uniforms una sola vez
   this.gl.uniform1i(this.uniformLocations.billboard.spriteIndex, tileType);
   this.gl.uniform1f(this.uniformLocations.billboard.spriteCount, this.tile_items_size);
-  
   this.gl.uniform1i(this.uniformLocations.billboard.fogEnabled, this.FOG_ENABLED);
   this.gl.uniform1f(this.uniformLocations.billboard.fogStart, this.FOG_START);
   this.gl.uniform1f(this.uniformLocations.billboard.fogEnd, this.FOG_END);
@@ -1469,15 +1490,16 @@ drawBillboardsInstanced(tileType, instances) {
   this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
   this.gl.uniform1i(this.uniformLocations.billboard.spritesheet, 0);
   
+  // ✅ OPTIMIZACIÓN 5: Configurar depth/blend solo una vez al inicio del render pass
   this.gl.depthFunc(this.gl.LEQUAL);
   this.gl.polygonOffset(-1.0, -1.0);
   this.gl.enable(this.gl.POLYGON_OFFSET_FILL);
   
-  // ¡Una sola llamada para todos los billboards de este tipo!
+  // Dibujar todas las instancias de una vez
   this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, 6, instances.length);
   
   this.gl.disable(this.gl.POLYGON_OFFSET_FILL);
-  this.gl.vertexAttribDivisor(this.attribLocations.billboard.instanceData, 0); // ← USAR attribLocations
+  this.gl.vertexAttribDivisor(this.attribLocations.billboard.instanceData, 0);
 }
 
 
