@@ -173,11 +173,13 @@ class Glitter7engine {
     this.tempObjects = new Array(this.MAP_WIDTH * this.MAP_HEIGHT + 1000);
     
     // Inicializar
-    this.initTextures();
-    this.initShaders();
-    this.initBuffers();
-    this.initUniforms();
-    this.setTileMap(config.map.array);
+this.initTextures();
+this.initShaders();
+this.initBuffers();
+this.initBillboardInstancing(); // ← AÑADIR ESTA LÍNEA
+this.initUniforms();
+this.setTileMap(config.map.array);
+
 
   }
   
@@ -393,26 +395,35 @@ getGroundFS() {
 }
 
 
-  
-getBillboardVS() {
+  getBillboardVS() {
   return `#version 300 es
   in vec2 a_offset;
-  uniform vec2 u_screenPos;
-  uniform float u_size;
-  uniform float u_scale;
+  in vec4 a_instanceData; // x, y, size, scale
   out vec2 v_texCoord;
+  out float v_distance; // Para fog
+  
+  uniform vec4 u_camera;
+  
   void main() {
-    vec2 pos = u_screenPos + vec2(a_offset.x, a_offset.y + 1.0) * u_size * u_scale;
-    //vec2 pos = u_screenPos + vec2(a_offset.x, -(a_offset.y + 1.0)) * u_size * u_scale;
+    vec2 screenPos = a_instanceData.xy;
+    float size = a_instanceData.z;
+    float scale = a_instanceData.w;
+    
+    vec2 pos = screenPos + vec2(a_offset.x, a_offset.y + 1.0) * size * scale;
     gl_Position = vec4(pos * 2.0 - 1.0, 0.0, 1.0);
     v_texCoord = (a_offset + 1.0) * 0.5;
+    
+    // Calcular distancia en vertex shader (más eficiente)
+    v_distance = 1.0 / size; // Aproximación de distancia
   }`;
 }
   
-  getBillboardFS() {
+
+getBillboardFS() {
   return `#version 300 es
   precision highp float;
   in vec2 v_texCoord;
+  in float v_distance;
   out vec4 outColor;
   uniform sampler2D u_spritesheet;
   uniform int u_spriteIndex;
@@ -421,25 +432,25 @@ getBillboardVS() {
   uniform float u_fogStart;
   uniform float u_fogEnd;
   uniform vec3 u_fogColor;
-  uniform float u_distance;
   
   void main() {
     vec2 uv = v_texCoord;
-      uv.y = 1.0 - uv.y;  // ← AÑADIR ESTA LÍNEA
+    uv.y = 1.0 - uv.y;
     uv.x /= u_spriteCount;
     uv.x += float(u_spriteIndex - 1) / u_spriteCount;
     vec4 color = texture(u_spritesheet, uv);
     if (color.a < 0.1) discard;
     
-    // Aplicar niebla
     if (u_fogEnabled) {
-      float fogFactor = clamp((u_fogEnd - u_distance) / (u_fogEnd - u_fogStart), 0.0, 1.0);
+      float fogFactor = clamp((u_fogEnd - v_distance) / (u_fogEnd - u_fogStart), 0.0, 1.0);
       outColor = vec4(mix(u_fogColor, color.rgb, fogFactor), color.a);
     } else {
       outColor = color;
     }
   }`;
 }
+
+
 getBlockVS() {
   return `#version 300 es
   in vec3 a_position;
@@ -620,9 +631,12 @@ getBlockFS() {
     this.skydomeBuffer = this.gl.createBuffer();
     this.skydomeIndexBuffer = this.gl.createBuffer();
     this.createSkydomeGeometry();
-
-  
   }
+
+  initBillboardInstancing() {
+  this.billboardInstanceBuffer = this.gl.createBuffer();
+  this.maxBillboardInstances = 1000; // Ajustable según tu escena
+}
   
   getCubeVertices() {
     return new Float32Array([
@@ -735,19 +749,17 @@ createSkydomeGeometry() {
       fogEnd: this.gl.getUniformLocation(this.program, 'u_fogEnd'),
       fogColor: this.gl.getUniformLocation(this.program, 'u_fogColor')
     },
-    billboard: {
-      screenPos: this.gl.getUniformLocation(this.billboardProgram, 'u_screenPos'),
-      size: this.gl.getUniformLocation(this.billboardProgram, 'u_size'),
-        scale: this.gl.getUniformLocation(this.billboardProgram, 'u_scale'),
-      spriteIndex: this.gl.getUniformLocation(this.billboardProgram, 'u_spriteIndex'),
-      spriteCount: this.gl.getUniformLocation(this.billboardProgram, 'u_spriteCount'),
-      spritesheet: this.gl.getUniformLocation(this.billboardProgram, 'u_spritesheet'),
-      fogEnabled: this.gl.getUniformLocation(this.billboardProgram, 'u_fogEnabled'),
-      fogStart: this.gl.getUniformLocation(this.billboardProgram, 'u_fogStart'),
-      fogEnd: this.gl.getUniformLocation(this.billboardProgram, 'u_fogEnd'),
-      fogColor: this.gl.getUniformLocation(this.billboardProgram, 'u_fogColor'),
-      distance: this.gl.getUniformLocation(this.billboardProgram, 'u_distance')
-    },
+billboard: {
+  spriteIndex: this.gl.getUniformLocation(this.billboardProgram, 'u_spriteIndex'),
+  spriteCount: this.gl.getUniformLocation(this.billboardProgram, 'u_spriteCount'),
+  spritesheet: this.gl.getUniformLocation(this.billboardProgram, 'u_spritesheet'),
+  fogEnabled: this.gl.getUniformLocation(this.billboardProgram, 'u_fogEnabled'),
+  fogStart: this.gl.getUniformLocation(this.billboardProgram, 'u_fogStart'),
+  fogEnd: this.gl.getUniformLocation(this.billboardProgram, 'u_fogEnd'),
+  fogColor: this.gl.getUniformLocation(this.billboardProgram, 'u_fogColor')
+  // ← ELIMINAR: screenPos, size, scale, distance (ya no se usan)
+},
+
     block: {
       camera: this.gl.getUniformLocation(this.blockProgram, 'u_camera'),
       resolution: this.gl.getUniformLocation(this.blockProgram, 'u_resolution'),
@@ -778,7 +790,10 @@ createSkydomeGeometry() {
         position: this.gl.getAttribLocation(this.program, 'a_position')
       },
       billboard: {
-        offset: this.gl.getAttribLocation(this.billboardProgram, 'a_offset')
+            offset: this.gl.getAttribLocation(this.billboardProgram, 'a_offset'),
+  instanceData: this.gl.getAttribLocation(this.billboardProgram, 'a_instanceData') // ← AÑADIR
+
+
       },
       block: {
         position: this.gl.getAttribLocation(this.blockProgram, 'a_position'),
@@ -799,15 +814,16 @@ createSkydomeGeometry() {
       
       image.onload = () => {
         this.tile_items_size = Math.floor(image.width / this.TILE_SIZE);
-        
         this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
         this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
-
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST); 
+
+      //this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_LINEAR); // Mejor calidad
+      //this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR); // Suaviza al acercar
       
-      this.gl.generateMipmap(this.gl.TEXTURE_2D); // Genera mipmaps para distancias
+     // this.gl.generateMipmap(this.gl.TEXTURE_2D); // Genera mipmaps para distancias
 
         
         resolve();
@@ -1408,6 +1424,63 @@ renderGround(camera) {
   this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
 }
 
+// nuevo metodo billboards
+
+
+drawBillboardsInstanced(tileType, instances) {
+  if (!instances || instances.length === 0) return;
+  
+  this.gl.useProgram(this.billboardProgram);
+  
+  // Preparar datos de instancia (x, y, size, scale)
+  const instanceData = new Float32Array(instances.length * 4);
+  for (let i = 0; i < instances.length; i++) {
+    instanceData[i * 4 + 0] = instances[i].proj.x;
+    instanceData[i * 4 + 1] = instances[i].proj.y;
+    instanceData[i * 4 + 2] = instances[i].proj.size;
+    instanceData[i * 4 + 3] = instances[i].scale || 1.0;
+  }
+  
+  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.billboardInstanceBuffer);
+  this.gl.bufferData(this.gl.ARRAY_BUFFER, instanceData, this.gl.DYNAMIC_DRAW);
+  
+  // Configurar geometría base del billboard
+  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.billboardBuffer);
+  this.gl.enableVertexAttribArray(this.attribLocations.billboard.offset);
+  this.gl.vertexAttribPointer(this.attribLocations.billboard.offset, 2, this.gl.FLOAT, false, 0, 0);
+  
+  // Configurar atributos de instancia
+  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.billboardInstanceBuffer);
+  this.gl.enableVertexAttribArray(this.attribLocations.billboard.instanceData); // ← USAR attribLocations
+  this.gl.vertexAttribPointer(this.attribLocations.billboard.instanceData, 4, this.gl.FLOAT, false, 16, 0);
+  this.gl.vertexAttribDivisor(this.attribLocations.billboard.instanceData, 1);
+  
+  // Uniforms (una sola vez para todo el batch)
+  this.gl.uniform1i(this.uniformLocations.billboard.spriteIndex, tileType);
+  this.gl.uniform1f(this.uniformLocations.billboard.spriteCount, this.tile_items_size);
+  
+  this.gl.uniform1i(this.uniformLocations.billboard.fogEnabled, this.FOG_ENABLED);
+  this.gl.uniform1f(this.uniformLocations.billboard.fogStart, this.FOG_START);
+  this.gl.uniform1f(this.uniformLocations.billboard.fogEnd, this.FOG_END);
+  this.gl.uniform3f(this.uniformLocations.billboard.fogColor, 
+    this.FOG_COLOR[0], this.FOG_COLOR[1], this.FOG_COLOR[2]);
+  
+  this.gl.activeTexture(this.gl.TEXTURE0);
+  this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
+  this.gl.uniform1i(this.uniformLocations.billboard.spritesheet, 0);
+  
+  this.gl.depthFunc(this.gl.LEQUAL);
+  this.gl.polygonOffset(-1.0, -1.0);
+  this.gl.enable(this.gl.POLYGON_OFFSET_FILL);
+  
+  // ¡Una sola llamada para todos los billboards de este tipo!
+  this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, 6, instances.length);
+  
+  this.gl.disable(this.gl.POLYGON_OFFSET_FILL);
+  this.gl.vertexAttribDivisor(this.attribLocations.billboard.instanceData, 0); // ← USAR attribLocations
+}
+
+
   
   // Renderizar billboard
   drawBillboard(billboard) {
@@ -1521,95 +1594,110 @@ drawBlocksInstanced(tileType, instances, camera) {
   this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 0);
 }
   
-  // Método principal de render
-  render(independentObjects = [], renderSky = true) {
-    this.time += 0.016;
-    let camera = this.camera;
-    this.lastCamera = camera; //
-    this.updateTrigCache(camera);
-    
-    this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    
-    // Cielo
-    if (renderSky) {
-      this.renderSky();
-    }
-    if (this.SKYDOME_ENABLED) {
-      this.renderSkydome(camera);
-    }
-    // Suelo
-    this.renderGround(camera);
-    
-    // Clear depth buffer
-    this.gl.clear(this.gl.DEPTH_BUFFER_BIT);
-    
-    // Recolectar objetos
-    const allObjects = this.collectRenderableObjects(camera, independentObjects);
-    
-    // Configurar depth test para objetos 3D
-    this.gl.enable(this.gl.DEPTH_TEST);
-    this.gl.depthFunc(this.gl.LEQUAL);
-    this.gl.depthMask(true);
-    this.gl.disable(this.gl.BLEND);
-    
-    // Renderizar objetos
-    let currentTile = null;
-    let batchInstances = [];
-    
-    for (const obj of allObjects) {
-      if (obj.type === 'block') {
-        if (currentTile === null) {
-          currentTile = obj.tile;
-        }
-        
-        if (currentTile === obj.tile) {
-          batchInstances.push(obj);
-        } else {
-          if (batchInstances.length > 0) {
-            this.drawBlocksInstanced(currentTile, batchInstances, camera);
-          }
-          currentTile = obj.tile;
-          batchInstances = [obj];
-        }
-      } else if (obj.type === 'billboard') {
-        if (batchInstances.length > 0) {
-          this.drawBlocksInstanced(currentTile, batchInstances, camera);
-          batchInstances = [];
-          currentTile = null;
-        }
-        this.gl.enable(this.gl.BLEND);
-        this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
-        this.gl.enable(this.gl.DEPTH_TEST);
-        this.gl.depthMask(false);
-        
-        this.drawBillboard(obj);
-        
-        this.gl.depthMask(true);
-        this.gl.disable(this.gl.BLEND);
-      }else if (obj.type === 'ramp') {
-  if (batchInstances.length > 0) {
-    this.drawBlocksInstanced(currentTile, batchInstances, camera);
-    batchInstances = [];
-    currentTile = null;
+render(independentObjects = [], renderSky = true) {
+  this.time += 0.016;
+  let camera = this.camera;
+  this.lastCamera = camera;
+  this.updateTrigCache(camera);
+  
+  this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+  
+  if (renderSky) {
+    this.renderSky();
+  }
+  if (this.SKYDOME_ENABLED) {
+    this.renderSkydome(camera);
   }
   
+  this.renderGround(camera);
+  this.gl.clear(this.gl.DEPTH_BUFFER_BIT);
+  
+  const allObjects = this.collectRenderableObjects(camera, independentObjects);
+  
   this.gl.enable(this.gl.DEPTH_TEST);
+  this.gl.depthFunc(this.gl.LEQUAL);
   this.gl.depthMask(true);
   this.gl.disable(this.gl.BLEND);
   
-  this.drawRamp(obj, camera);
-}
+  // ============================================
+  // RENDERIZADO RESPETANDO ORDEN DE PROFUNDIDAD
+  // ============================================
+  let currentBlockTile = null;
+  let blockBatch = [];
+  
+  for (const obj of allObjects) {
+    if (obj.type === 'block') {
+      // Agrupar bloques consecutivos del mismo tile
+      if (currentBlockTile === obj.tile) {
+        blockBatch.push(obj);
+      } else {
+        // Dibujar batch anterior si existe
+        if (blockBatch.length > 0) {
+          this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
+        }
+        // Iniciar nuevo batch
+        currentBlockTile = obj.tile;
+        blockBatch = [obj];
+      }
+    } else if (obj.type === 'billboard') {
+      // Dibujar bloques pendientes antes de billboards
+      if (blockBatch.length > 0) {
+        this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
+        blockBatch = [];
+        currentBlockTile = null;
+      }
+      
+      // Configurar estado para billboards
+      this.gl.enable(this.gl.BLEND);
+      this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
+      this.gl.depthMask(false);
+      
+      // Agrupar billboards consecutivos del mismo tile
+      const billboardBatch = [obj];
+      let nextIndex = allObjects.indexOf(obj) + 1;
+      
+      // Buscar billboards consecutivos del mismo tile
+      while (nextIndex < allObjects.length) {
+        const nextObj = allObjects[nextIndex];
+        if (nextObj.type === 'billboard' && nextObj.tile === obj.tile) {
+          billboardBatch.push(nextObj);
+          nextIndex++;
+        } else {
+          break;
+        }
+      }
+      
+      // Dibujar batch de billboards
+      this.drawBillboardsInstanced(obj.tile, billboardBatch);
+      
+      // Saltar los billboards que ya procesamos
+      allObjects.splice(allObjects.indexOf(obj) + 1, billboardBatch.length - 1);
+      
+      // Restaurar estado
+      this.gl.depthMask(true);
+      this.gl.disable(this.gl.BLEND);
+      
+    } else if (obj.type === 'ramp') {
+      // Dibujar bloques pendientes antes de rampas
+      if (blockBatch.length > 0) {
+        this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
+        blockBatch = [];
+        currentBlockTile = null;
+      }
+      
+      this.drawRamp(obj, camera);
     }
-    
-    // Renderizar batch final
-    if (batchInstances.length > 0) {
-      this.drawBlocksInstanced(currentTile, batchInstances, camera);
-    }
-    
-    this.gl.disable(this.gl.DEPTH_TEST);
-    this.gl.enable(this.gl.BLEND);
   }
   
+  // Dibujar último batch de bloques si existe
+  if (blockBatch.length > 0) {
+    this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
+  }
+  
+  this.gl.disable(this.gl.DEPTH_TEST);
+  this.gl.enable(this.gl.BLEND);
+}
+
   // Métodos de utilidad
   toggleIllumination() {
     this.ILLUMINATION = !this.ILLUMINATION;
