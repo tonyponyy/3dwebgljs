@@ -5,7 +5,7 @@
 // ================= CONFIGURACIÓN ======================
 const PLAYER_CONFIG = {
   // Kart
-  MAX_SPEED: 0.45,
+  MAX_SPEED: 0.60,
   ACCELERATION: 0.018,
   BRAKE_DECELERATION: 0.04,
   ROLL_DECELERATION: 0.006,
@@ -232,9 +232,7 @@ if (resolved.blocked) {
     player.velocityZ = 0;
   }
 
-  if (obj.z > 0 && !grounded){
-    obj.z -=0.01
-  }
+
   obj.z = (parseInt(obj.z) == 0) && ((obj.z - parseInt(obj.z) ) < 0.9 )? parseInt(obj.z) : obj.z ;
 
   obj.z += player.velocityZ;
