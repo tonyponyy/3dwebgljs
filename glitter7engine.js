@@ -130,7 +130,9 @@ class Glitter7engine {
     }
       //this.billboardInstanceData = null; // Se inicializa dinámicamente según necesidad
       //this.maxBillboardInstances = 20; // Aumentar si tienes más billboards
-
+      //modelo 3d
+      this.models3D = new Map(); // Caché de modelos cargados
+      this.modelBuffers = new Map(); // Buffers WebGL por modelo
     // WebGL Context
     let contextOptions = this.canvas.getContext('webgl2', {
       alpha: CANVAS_ANTIALIAS_DEFAULT,
@@ -204,14 +206,191 @@ this.setTileMap(config.map.array);
 
   }
   
-  initShaders() {
-    // Crear shaders
-    this.program = this.createProgram(this.getGroundVS(), this.getGroundFS());
-    this.billboardProgram = this.createProgram(this.getBillboardVS(), this.getBillboardFS());
-    this.blockProgram = this.createProgram(this.getBlockVS(), this.getBlockFS());
-    this.skyProgram = this.createProgram(this.getSkyVS(), this.getSkyFS());
-    this.skydomeProgram = this.createProgram(this.getSkydomeVS(), this.getSkydomeFS());
+initShaders() {
+  // Crear shaders
+  this.program = this.createProgram(this.getGroundVS(), this.getGroundFS());
+  this.billboardProgram = this.createProgram(this.getBillboardVS(), this.getBillboardFS());
+  this.blockProgram = this.createProgram(this.getBlockVS(), this.getBlockFS());
+  this.skyProgram = this.createProgram(this.getSkyVS(), this.getSkyFS());
+  this.skydomeProgram = this.createProgram(this.getSkydomeVS(), this.getSkydomeFS());
+  this.modelProgram = this.createProgram(this.getModelVS(), this.getModelFS()); // ✅ NUEVO
+}
+
+// ✅ NUEVO: Vertex Shader para Modelos 3D
+getModelVS() {
+  return `#version 300 es
+  in vec3 a_position;
+  in vec2 a_texCoord;
+  in vec3 a_normal;
+  
+  uniform vec4 u_camera;
+  uniform vec2 u_resolution;
+  uniform vec3 u_modelPos;      // Posición del modelo
+  uniform float u_modelScale;   // Escala uniforme
+  uniform vec3 u_modelRotation; // Rotación en radianes (x, y, z)
+  
+  out vec2 v_texCoord;
+  out float v_depth;
+  out vec3 v_normal;
+  out vec3 v_worldPos;
+  
+  mat4 rotationMatrix(vec3 rotation) {
+    float cx = cos(rotation.x);
+    float sx = sin(rotation.x);
+    float cy = cos(rotation.y);
+    float sy = sin(rotation.y);
+    float cz = cos(rotation.z);
+    float sz = sin(rotation.z);
+    
+    mat4 rx = mat4(
+      1.0, 0.0, 0.0, 0.0,
+      0.0, cx, -sx, 0.0,
+      0.0, sx, cx, 0.0,
+      0.0, 0.0, 0.0, 1.0
+    );
+    
+    mat4 ry = mat4(
+      cy, 0.0, sy, 0.0,
+      0.0, 1.0, 0.0, 0.0,
+      -sy, 0.0, cy, 0.0,
+      0.0, 0.0, 0.0, 1.0
+    );
+    
+    mat4 rz = mat4(
+      cz, -sz, 0.0, 0.0,
+      sz, cz, 0.0, 0.0,
+      0.0, 0.0, 1.0, 0.0,
+      0.0, 0.0, 0.0, 1.0
+    );
+    
+    return rz * ry * rx;
   }
+  
+  void main() {
+    // Aplicar rotación y escala
+    mat4 rotMat = rotationMatrix(u_modelRotation);
+    vec3 rotatedPos = (rotMat * vec4(a_position, 1.0)).xyz;
+    vec3 scaledPos = rotatedPos * u_modelScale;
+    
+    // Posición en el mundo
+    vec3 worldPos = scaledPos + u_modelPos;
+    v_worldPos = worldPos;
+    
+    // Proyección de cámara
+    float dx = worldPos.x - u_camera.x;
+    float dy = worldPos.z - u_camera.y;
+    
+    float angle = u_camera.w;
+    float cosA = cos(-angle);
+    float sinA = sin(-angle);
+    
+    float rotX = dx * cosA - dy * sinA;
+    float rotY = dx * sinA + dy * cosA;
+    
+    if (rotY < 0.5) {
+      gl_Position = vec4(0.0, 0.0, -2.0, 1.0);
+      v_texCoord = a_texCoord;
+      v_depth = -1.0;
+      v_normal = (rotMat * vec4(a_normal, 0.0)).xyz;
+      return;
+    }
+    
+    float horizon = 0.3;
+    float screenX = 0.5 + rotX / rotY;
+    float screenY = 1.0 - (horizon + (u_camera.z - worldPos.y) / rotY);
+    
+    gl_Position = vec4(
+      screenX * 2.0 - 1.0,
+      screenY * 2.0 - 1.0,
+      rotY / ${this.MAX_RENDER_DISTANCE}.0,
+      1.0
+    );
+    
+    v_texCoord = a_texCoord;
+    v_depth = rotY;
+    v_normal = (rotMat * vec4(a_normal, 0.0)).xyz;
+  }`;
+}
+
+// ✅ NUEVO: Fragment Shader para Modelos 3D (igual que blocks)
+getModelFS() {
+  return `#version 300 es
+  precision highp float;
+  in vec2 v_texCoord;
+  in float v_depth;
+  in vec3 v_normal;
+  in vec3 v_worldPos;
+  out vec4 outColor;
+  
+  uniform sampler2D u_spritesheet;
+  uniform int u_spriteIndex;
+  uniform float u_spriteCount;
+  uniform vec3 u_lightDir;
+  uniform bool u_illumination;
+  uniform float u_ambient;
+  uniform float u_diffuse;
+  uniform bool u_fogEnabled;
+  uniform float u_fogStart;
+  uniform float u_fogEnd;
+  uniform vec3 u_fogColor;
+  uniform vec4 u_camera;
+  
+  float calculateAO() {
+    vec3 localPos = fract(v_worldPos);
+    float heightFactor = smoothstep(0.0, 0.4, localPos.y);
+    float ao = mix(0.8, 1.0, heightFactor);
+    
+    if (abs(v_normal.y) < 0.3) {
+      ao *= 0.93;
+    }
+    else if (v_normal.y > 0.9) {
+      ao = 1.0;
+    }
+    
+    return ao;
+  }
+  
+void main() {
+  if (v_depth < 0.0) discard;
+  
+  float spriteWidth = 1.0 / u_spriteCount;
+  vec2 uv = v_texCoord;
+  
+  // DEBUG: Visualizar las coordenadas UV
+   //outColor = vec4(uv.x, uv.y, 0.0, 1.0);
+   //return;
+  
+  uv.x = uv.x * spriteWidth;
+  uv.x += float(u_spriteIndex - 1) * spriteWidth;
+  
+  vec4 color = texture(u_spritesheet, uv);
+  if (color.a < 0.1) discard;
+
+    // DEBUG: Visualizar las coordenadas UV
+   //outColor = vec4(uv.x, uv.y, 0.0, 1.0);
+   //return;
+  
+  vec3 finalColor = color.rgb;
+  
+  float ao = calculateAO();
+  finalColor *= ao;
+  
+  if (u_illumination) {
+    float diffuseLight = max(dot(normalize(v_normal), u_lightDir), 0.0);
+    float lighting = u_ambient + diffuseLight * u_diffuse;
+    finalColor *= lighting;
+  }
+  
+  if (u_fogEnabled) {
+    float heightFactor = 1.0 - clamp(u_camera.z / 10.0, 0.0, 1.0);
+    float enhancedFogEnd = u_fogEnd * (1.0 + heightFactor * 0.5);
+    float fogFactor = clamp((enhancedFogEnd - v_depth) / (enhancedFogEnd - u_fogStart), 0.0, 1.0);
+    finalColor = mix(u_fogColor, finalColor, fogFactor);
+  }
+  
+  outColor = vec4(finalColor, color.a);
+}`;
+}
   
   createShader(type, source) {
     const shader = this.gl.createShader(type);
@@ -396,17 +575,14 @@ getGroundFS() {
   }`;
 }
 
-
-  getBillboardVS() {
+getBillboardVS() {
   return `#version 300 es
   in vec2 a_offset;
-  //optim
-  in vec4 a_instanceData; // x, y, size
-  in float a_spriteIndex;
-
-  flat out int v_spriteIndex;  out vec2 v_texCoord;
+  in vec4 a_instanceData;
   
-  out float v_distance; // Para fog
+  out vec2 v_texCoord;
+  out float v_distance;
+  flat out float v_clipTest; // NUEVO
   
   uniform vec4 u_camera;
   
@@ -415,15 +591,16 @@ getGroundFS() {
     float size = a_instanceData.z;
     float scale = a_instanceData.w;
     
+    // Clip test temprano
+    v_clipTest = step(0.0, screenPos.x) * step(screenPos.x, 1.0) 
+               * step(0.0, screenPos.y) * step(screenPos.y, 1.0);
+    
     vec2 pos = screenPos + vec2(a_offset.x, a_offset.y + 1.0) * size * scale;
     gl_Position = vec4(pos * 2.0 - 1.0, 0.0, 1.0);
     v_texCoord = (a_offset + 1.0) * 0.5;
-    
-    // Calcular distancia en vertex shader (más eficiente)
-    v_distance = 1.0 / size; // Aproximación de distancia
+    v_distance = 1.0 / size;
   }`;
 }
-  
 
 getBillboardFS() {
   return `#version 300 es
@@ -786,6 +963,24 @@ billboard: {
     sky: {
       color1: this.gl.getUniformLocation(this.skyProgram, 'u_color1'),
       color2: this.gl.getUniformLocation(this.skyProgram, 'u_color2')
+    },
+    model: {
+      camera: this.gl.getUniformLocation(this.modelProgram, 'u_camera'),
+      resolution: this.gl.getUniformLocation(this.modelProgram, 'u_resolution'),
+      modelPos: this.gl.getUniformLocation(this.modelProgram, 'u_modelPos'),
+      modelScale: this.gl.getUniformLocation(this.modelProgram, 'u_modelScale'),
+      modelRotation: this.gl.getUniformLocation(this.modelProgram, 'u_modelRotation'),
+      spriteIndex: this.gl.getUniformLocation(this.modelProgram, 'u_spriteIndex'),
+      spriteCount: this.gl.getUniformLocation(this.modelProgram, 'u_spriteCount'),
+      spritesheet: this.gl.getUniformLocation(this.modelProgram, 'u_spritesheet'),
+      lightDir: this.gl.getUniformLocation(this.modelProgram, 'u_lightDir'),
+      illumination: this.gl.getUniformLocation(this.modelProgram, 'u_illumination'),
+      ambient: this.gl.getUniformLocation(this.modelProgram, 'u_ambient'),
+      diffuse: this.gl.getUniformLocation(this.modelProgram, 'u_diffuse'),
+      fogEnabled: this.gl.getUniformLocation(this.modelProgram, 'u_fogEnabled'),
+      fogStart: this.gl.getUniformLocation(this.modelProgram, 'u_fogStart'),
+      fogEnd: this.gl.getUniformLocation(this.modelProgram, 'u_fogEnd'),
+      fogColor: this.gl.getUniformLocation(this.modelProgram, 'u_fogColor')
     }
   };
     
@@ -811,7 +1006,12 @@ billboard: {
       },
       sky: {
         position: this.gl.getAttribLocation(this.skyProgram, 'a_position')
-      }
+      },
+          model: {
+      position: this.gl.getAttribLocation(this.modelProgram, 'a_position'),
+      texCoord: this.gl.getAttribLocation(this.modelProgram, 'a_texCoord'),
+      normal: this.gl.getAttribLocation(this.modelProgram, 'a_normal')
+    }
     };
   }
   
@@ -1316,13 +1516,96 @@ collectRenderableObjects(camera, independentObjects = []) {
         tile: obj.tile,
         dist: distSq
       };
-    }
+    }else if (obj.type === 'model3d') {
+        this.tempObjects[this.objectCount++] = {
+          type: 'model3d',
+          modelName: obj.modelName,
+          x: worldX,
+          y: height,
+          z: worldY,
+          tile: obj.tile,
+          scale: obj.scale || 1.0,
+          rotation: obj.rotation || { x: 0, y: 0, z: 0 },
+          dist: distSq
+        };}
   }
   
   const objects = this.tempObjects.slice(0, this.objectCount);
   objects.sort((a, b) => b.dist - a.dist);
   return objects;
 }
+
+
+drawModel3DInstanced(modelName, instances, camera) {
+  if (!instances || instances.length === 0) return;
+  
+  const model = this.models3D.get(modelName);
+  if (!model) return;
+  
+  // ✅ Usar shader de modelos
+  this.gl.useProgram(this.modelProgram);
+  
+  // Configurar geometría del modelo
+  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, model.buffer);
+  
+  this.gl.enableVertexAttribArray(this.attribLocations.model.position);
+  this.gl.vertexAttribPointer(this.attribLocations.model.position, 3, this.gl.FLOAT, false, 32, 0);
+  
+  this.gl.enableVertexAttribArray(this.attribLocations.model.texCoord);
+  this.gl.vertexAttribPointer(this.attribLocations.model.texCoord, 2, this.gl.FLOAT, false, 32, 12);
+  
+  this.gl.enableVertexAttribArray(this.attribLocations.model.normal);
+  this.gl.vertexAttribPointer(this.attribLocations.model.normal, 3, this.gl.FLOAT, false, 32, 20);
+  
+  // Uniforms comunes
+  this.gl.uniform4f(this.uniformLocations.model.camera, camera.x, camera.y, camera.z, camera.angle);
+  this.gl.uniform2f(this.uniformLocations.model.resolution, this.canvas.width, this.canvas.height);
+  this.gl.uniform1i(this.uniformLocations.model.spriteIndex, instances[0].tile);
+  this.gl.uniform1f(this.uniformLocations.model.spriteCount, this.tile_items_size);
+  
+  // Iluminación
+  this.gl.uniform1i(this.uniformLocations.model.illumination, this.ILLUMINATION);
+  this.gl.uniform1f(this.uniformLocations.model.ambient, this.AMBIENT_LIGHT);
+  this.gl.uniform1f(this.uniformLocations.model.diffuse, this.LIGHT_DIFFUSE);
+  
+  const len = Math.sqrt(
+    this.lightDir[0] * this.lightDir[0] + 
+    this.lightDir[1] * this.lightDir[1] + 
+    this.lightDir[2] * this.lightDir[2]
+  );
+  this.gl.uniform3f(this.uniformLocations.model.lightDir, 
+    this.lightDir[0]/len, this.lightDir[1]/len, this.lightDir[2]/len);
+  
+  // Textura
+  this.gl.activeTexture(this.gl.TEXTURE0);
+  this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
+  this.gl.uniform1i(this.uniformLocations.model.spritesheet, 0);
+  
+  // Niebla
+  this.gl.uniform1i(this.uniformLocations.model.fogEnabled, this.FOG_ENABLED);
+  this.gl.uniform1f(this.uniformLocations.model.fogStart, this.FOG_START);
+  this.gl.uniform1f(this.uniformLocations.model.fogEnd, this.FOG_END);
+  this.gl.uniform3f(this.uniformLocations.model.fogColor, 
+    this.FOG_COLOR[0], this.FOG_COLOR[1], this.FOG_COLOR[2]);
+  
+  // ✅ Dibujar cada instancia con su transformación única
+  for (let i = 0; i < instances.length; i++) {
+    const inst = instances[i];
+    const rotation = inst.rotation || { x: 0, y: 0, z: 0 };
+    
+    this.gl.uniform3f(this.uniformLocations.model.modelPos, inst.x, inst.y, inst.z);
+    this.gl.uniform1f(this.uniformLocations.model.modelScale, inst.scale || 1.0);
+    this.gl.uniform3f(this.uniformLocations.model.modelRotation, rotation.x, rotation.y, rotation.z);
+    
+    this.gl.drawArrays(this.gl.TRIANGLES, 0, model.vertexCount);
+  }
+  
+  // Limpiar
+  this.gl.disableVertexAttribArray(this.attribLocations.model.position);
+  this.gl.disableVertexAttribArray(this.attribLocations.model.texCoord);
+  this.gl.disableVertexAttribArray(this.attribLocations.model.normal);
+}
+
 
   // Renderizar cielo
   renderSky() {
@@ -1616,109 +1899,139 @@ drawBlocksInstanced(tileType, instances, camera) {
   this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 0);
 }
   
-render(independentObjects = [], renderSky = true) {
-  this.time += 0.016;
-  let camera = this.camera;
-  this.lastCamera = camera;
-  this.updateTrigCache(camera);
-  
-  this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-  
-  if (renderSky) {
-    this.renderSky();
-  }
-  if (this.SKYDOME_ENABLED) {
-    this.renderSkydome(camera);
-  }
-  
-  this.renderGround(camera);
-  this.gl.clear(this.gl.DEPTH_BUFFER_BIT);
-  
-  const allObjects = this.collectRenderableObjects(camera, independentObjects);
-  
-  this.gl.enable(this.gl.DEPTH_TEST);
-  this.gl.depthFunc(this.gl.LEQUAL);
-  this.gl.depthMask(true);
-  this.gl.disable(this.gl.BLEND);
-  
-  // ============================================
-  // RENDERIZADO RESPETANDO ORDEN DE PROFUNDIDAD
-  // ============================================
-  let currentBlockTile = null;
-  let blockBatch = [];
-  
-  for (const obj of allObjects) {
-    if (obj.type === 'block') {
-      // Agrupar bloques consecutivos del mismo tile
-      if (currentBlockTile === obj.tile) {
-        blockBatch.push(obj);
-      } else {
-        // Dibujar batch anterior si existe
+
+ // Modificar el método render principal
+  render(independentObjects = [], renderSky = true) {
+    this.time += 0.016;
+    let camera = this.camera;
+    this.lastCamera = camera;
+    this.updateTrigCache(camera);
+    
+    this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    
+    if (renderSky) this.renderSky();
+    if (this.SKYDOME_ENABLED) this.renderSkydome(camera);
+    
+    this.renderGround(camera);
+    this.gl.clear(this.gl.DEPTH_BUFFER_BIT);
+    
+    const allObjects = this.collectRenderableObjects(camera, independentObjects);
+    
+    this.gl.enable(this.gl.DEPTH_TEST);
+    this.gl.depthFunc(this.gl.LEQUAL);
+    this.gl.depthMask(true);
+    this.gl.disable(this.gl.BLEND);
+    
+    // Agrupar objetos por tipo
+    let currentBlockTile = null;
+    let blockBatch = [];
+    let currentModelName = null;
+    let modelBatch = [];
+    
+    for (const obj of allObjects) {
+      if (obj.type === 'block') {
+        // Dibujar modelos 3D pendientes
+        if (modelBatch.length > 0) {
+          this.drawModel3DInstanced(currentModelName, modelBatch, camera);
+          modelBatch = [];
+          currentModelName = null;
+        }
+        
+        // Agrupar bloques
+        if (currentBlockTile === obj.tile) {
+          blockBatch.push(obj);
+        } else {
+          if (blockBatch.length > 0) {
+            this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
+          }
+          currentBlockTile = obj.tile;
+          blockBatch = [obj];
+        }
+      }
+      else if (obj.type === 'model3d') {
+        // Dibujar bloques pendientes
         if (blockBatch.length > 0) {
           this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
+          blockBatch = [];
+          currentBlockTile = null;
         }
-        // Iniciar nuevo batch
-        currentBlockTile = obj.tile;
-        blockBatch = [obj];
-      }
-    } else if (obj.type === 'billboard') {
-      // Dibujar bloques pendientes antes de billboards
-      if (blockBatch.length > 0) {
-        this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
-        blockBatch = [];
-        currentBlockTile = null;
-      }
-      
-      // Configurar estado para billboards
-      this.gl.enable(this.gl.BLEND);
-      this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
-      this.gl.depthMask(false);
-      
-      // Agrupar billboards consecutivos del mismo tile
-      const billboardBatch = [obj];
-      let nextIndex = allObjects.indexOf(obj) + 1;
-      
-      // Buscar billboards consecutivos del mismo tile
-      while (nextIndex < allObjects.length) {
-        const nextObj = allObjects[nextIndex];
-        if (nextObj.type === 'billboard' && nextObj.tile === obj.tile) {
-          billboardBatch.push(nextObj);
-          nextIndex++;
+        
+        // Agrupar modelos 3D
+        if (currentModelName === obj.modelName) {
+          modelBatch.push(obj);
         } else {
-          break;
+          if (modelBatch.length > 0) {
+            this.drawModel3DInstanced(currentModelName, modelBatch, camera);
+          }
+          currentModelName = obj.modelName;
+          modelBatch = [obj];
         }
       }
-      
-      // Dibujar batch de billboards
-      this.drawBillboardsInstanced(obj.tile, billboardBatch);
-      
-      // Saltar los billboards que ya procesamos
-      allObjects.splice(allObjects.indexOf(obj) + 1, billboardBatch.length - 1);
-      
-      // Restaurar estado
-      this.gl.depthMask(true);
-      this.gl.disable(this.gl.BLEND);
-      
-    } else if (obj.type === 'ramp') {
-      // Dibujar bloques pendientes antes de rampas
-      if (blockBatch.length > 0) {
-        this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
-        blockBatch = [];
-        currentBlockTile = null;
+      else if (obj.type === 'billboard') {
+        // Dibujar pendientes
+        if (blockBatch.length > 0) {
+          this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
+          blockBatch = [];
+          currentBlockTile = null;
+        }
+        if (modelBatch.length > 0) {
+          this.drawModel3DInstanced(currentModelName, modelBatch, camera);
+          modelBatch = [];
+          currentModelName = null;
+        }
+        
+        this.gl.enable(this.gl.BLEND);
+        this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
+        this.gl.depthMask(false);
+        
+        const billboardBatch = [obj];
+        let nextIndex = allObjects.indexOf(obj) + 1;
+        
+        while (nextIndex < allObjects.length) {
+          const nextObj = allObjects[nextIndex];
+          if (nextObj.type === 'billboard' && nextObj.tile === obj.tile) {
+            billboardBatch.push(nextObj);
+            nextIndex++;
+          } else {
+            break;
+          }
+        }
+        
+        this.drawBillboardsInstanced(obj.tile, billboardBatch);
+        allObjects.splice(allObjects.indexOf(obj) + 1, billboardBatch.length - 1);
+        
+        this.gl.depthMask(true);
+        this.gl.disable(this.gl.BLEND);
       }
-      
-      this.drawRamp(obj, camera);
+      else if (obj.type === 'ramp') {
+        if (blockBatch.length > 0) {
+          this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
+          blockBatch = [];
+          currentBlockTile = null;
+        }
+        if (modelBatch.length > 0) {
+          this.drawModel3DInstanced(currentModelName, modelBatch, camera);
+          modelBatch = [];
+          currentModelName = null;
+        }
+        this.drawRamp(obj, camera);
+      }
     }
+    
+    // Dibujar últimos batches
+    if (blockBatch.length > 0) {
+      this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
+    }
+    if (modelBatch.length > 0) {
+      this.drawModel3DInstanced(currentModelName, modelBatch, camera);
+    }
+    
+    this.gl.disable(this.gl.DEPTH_TEST);
+    this.gl.enable(this.gl.BLEND);
   }
-  
-  // Dibujar último batch de bloques si existe
-  if (blockBatch.length > 0) {
-    this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
-  }
-  
-  this.gl.disable(this.gl.DEPTH_TEST);
-  this.gl.enable(this.gl.BLEND);
-}
+
+
+
 
   // Métodos de utilidad
   toggleIllumination() {
@@ -2282,5 +2595,183 @@ isWaterTile(tile) {
   return this.water_tiles_set.has(tile);
 }
 
-
+  async loadModel(name, objUrl) {
+    try {
+      console.log(`Cargando modelo: ${name} desde ${objUrl}`);
+      
+      const objData = await OBJLoader.load(objUrl);
+      const vertexArray = OBJLoader.toVertexArray(objData);
+      
+      // Crear buffer WebGL
+      const buffer = this.gl.createBuffer();
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, vertexArray, this.gl.STATIC_DRAW);
+      
+      const model = {
+        name,
+        vertexCount: vertexArray.length / 8, // 8 floats por vértice
+        buffer,
+        vertexArray
+      };
+      
+      this.models3D.set(name, model);
+      this.modelBuffers.set(name, buffer);
+      
+      console.log(`Modelo ${name} cargado: ${model.vertexCount} vértices`);
+      return model;
+      
+    } catch (error) {
+      console.error(`Error cargando modelo ${name}:`, error);
+      throw error;
+    }
+  }
+  
+  // Método para crear instancias de modelos en la escena
+createModelInstance(modelName, x, y, z, options = {}) {
+  // ✅ No verificar aquí, solo crear el objeto
+  // El modelo puede no estar cargado todavía, pero eso está OK
+  
+  return {
+    type: 'model3d',
+    modelName,
+    x, y, z,
+    scale: options.scale || 1.0,
+    rotation: options.rotation || { x: 0, y: 0, z: 0 },
+    tile: options.tile || 1,
+    customHeight: options.height || null
+  };
 }
+}
+//parser obj
+// Agregar a glitter7engine.js
+
+class OBJLoader {
+  static async load(url) {
+    const response = await fetch(url);
+    const text = await response.text();
+    return this.parse(text);
+  }
+    static simplify(objData, targetReduction = 0.5) {
+    // targetReduction: 0.5 = reducir a 50%, 0.1 = reducir a 10%
+    
+    console.log(`Simplificando modelo: ${objData.faces.length} caras originales`);
+    
+    const newFaces = [];
+    const step = Math.max(1, Math.floor(1 / targetReduction));
+    
+    // Tomar 1 de cada N caras
+    for (let i = 0; i < objData.faces.length; i += step) {
+      newFaces.push(objData.faces[i]);
+    }
+    
+    console.log(`Simplificado a: ${newFaces.length} caras (${(newFaces.length / objData.faces.length * 100).toFixed(1)}%)`);
+    
+    return {
+      vertices: objData.vertices,
+      texCoords: objData.texCoords,
+      normals: objData.normals,
+      faces: newFaces
+    };
+  }
+  
+  static async load(url) {
+    const response = await fetch(url);
+    const text = await response.text();
+    return this.parse(text);
+  }
+  
+  static parse(objText) {
+    const vertices = [];
+    const texCoords = [];
+    const normals = [];
+    const faces = [];
+    
+    const lines = objText.split('\n');
+    
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/);
+      const type = parts[0];
+      
+      if (type === 'v') {
+        vertices.push(
+          parseFloat(parts[1]),
+          parseFloat(parts[2]),
+          parseFloat(parts[3])
+        );
+      }
+      else if (type === 'vt') {
+        texCoords.push(
+          parseFloat(parts[1]),
+          parseFloat(parts[2])
+        );
+      }
+      else if (type === 'vn') {
+        normals.push(
+          parseFloat(parts[1]),
+          parseFloat(parts[2]),
+          parseFloat(parts[3])
+        );
+      }
+      else if (type === 'f') {
+        const face = [];
+        for (let i = 1; i < parts.length; i++) {
+          const indices = parts[i].split('/');
+          face.push({
+            v: parseInt(indices[0]) - 1,
+            vt: indices[1] ? parseInt(indices[1]) - 1 : null,
+            vn: indices[2] ? parseInt(indices[2]) - 1 : null
+          });
+        }
+        faces.push(face);
+      }
+    }
+    
+    return { vertices, texCoords, normals, faces };
+  }
+  
+  static toVertexArray(objData) {
+    const vertexData = [];
+    
+    for (const face of objData.faces) {
+      const triangles = face.length === 3 ? [face] : [
+        [face[0], face[1], face[2]],
+        [face[0], face[2], face[3]]
+      ];
+      
+      for (const tri of triangles) {
+        for (const vertex of tri) {
+          const vIdx = vertex.v * 3;
+          vertexData.push(
+            objData.vertices[vIdx],
+            objData.vertices[vIdx + 1],
+            objData.vertices[vIdx + 2]
+          );
+          
+          if (vertex.vt !== null) {
+            const vtIdx = vertex.vt * 2;
+            vertexData.push(
+              objData.texCoords[vtIdx],
+              objData.texCoords[vtIdx + 1]
+            );
+          } else {
+            vertexData.push(0, 0);
+          }
+          
+          if (vertex.vn !== null) {
+            const vnIdx = vertex.vn * 3;
+            vertexData.push(
+              objData.normals[vnIdx],
+              objData.normals[vnIdx + 1],
+              objData.normals[vnIdx + 2]
+            );
+          } else {
+            vertexData.push(0, 1, 0);
+          }
+        }
+      }
+    }
+    
+    return new Float32Array(vertexData);
+  }
+}
+  
