@@ -59,9 +59,15 @@ class Glitter7engine {
     this.rotatable_billboards = config.rotatableBillboards || [];
     this.rotatable_billboards_set = new Set(this.rotatable_billboards);
     this.billboard_scales = config.billboardScales || {}; // {tile: scale}
-    this.RAMP_ENABLED = config.rampEnabled !== undefined ? config.rampEnabled : true;
+
+    //modelos 3d 
+    // NUEVO: Configuración de modelos 3D
+    this.model3d_tiles = config.model3dTiles || [];
+    this.model3d_tiles_set = new Set(this.model3d_tiles);
+    this.model3d_config = config.model3dConfig || {}; // {tile: {modelName, scale, rotation, height}}
 
   // Tipos de rampas posibles
+      this.RAMP_ENABLED = config.rampEnabled !== undefined ? config.rampEnabled : true;
   this.RAMP_TYPES = {
     STRAIGHT: 'straight',      // Rampa recta (1 lado alto, 1 bajo)
     INNER_CORNER: 'inner',     // Esquina interior (2 lados altos adyacentes)
@@ -1062,43 +1068,50 @@ billboard: {
     this.tileMap = tileMap;
     this.updateTileMapTexture();
   }
-  
-updateTileMapTexture() {
+
+
+  updateTileMapTexture() {
   if (!this.tileMap) return;
   
   const data = new Uint8Array(this.MAP_WIDTH * this.MAP_HEIGHT);
-for (let i = 0; i < this.tileMap.length; i++) {
-  const tile = this.tileMap[i];
-  const heightMapValue = this.heightMap ? (this.heightMap[i] || 0.0) : 0.0;
-  
-  // Si es un billboard, poner el tile de suelo correspondiente
-  if (this.isBillboard(tile)) {
-    // Si hay altura, no renderizar suelo (se renderiza como bloque)
-    if (heightMapValue > 0) {
-      data[i] = 0; // Transparente
-    } else {
-      data[i] = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
+  for (let i = 0; i < this.tileMap.length; i++) {
+    const tile = this.tileMap[i];
+    const heightMapValue = this.heightMap ? (this.heightMap[i] || 0.0) : 0.0;
+    
+    // Si es un billboard, poner el tile de suelo correspondiente
+    if (this.isBillboard(tile)) {
+      // Si hay altura, no renderizar suelo (se renderiza como bloque)
+      if (heightMapValue > 0) {
+        data[i] = 0; // Transparente
+      } else {
+        data[i] = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
+      }
+    } 
+    // ✅ AÑADIR: Manejo de modelos 3D
+    else if (this.isModel3D(tile)) {
+      // Los modelos 3D usan groundTile de su configuración
+      const config = this.getModel3DConfig(tile);
+      data[i] = config.groundTile || 0;
     }
-  } else if (this.isBlock(tile)) {
-    // Los bloques no se renderizan en el suelo
-    data[i] = 0;
-  } else {
-    // Tile de suelo normal
-    // Si tiene altura en heightMap, no renderizar en suelo (se convierte en bloque)
-    if (heightMapValue > 0) {
+    else if (this.isBlock(tile)) {
+      // Los bloques no se renderizan en el suelo
       data[i] = 0;
     } else {
-      data[i] = tile;
+      // Tile de suelo normal
+      // Si tiene altura en heightMap, no renderizar en suelo (se convierte en bloque)
+      if (heightMapValue > 0) {
+        data[i] = 0;
+      } else {
+        data[i] = tile;
+      }
     }
   }
-}
   
   this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
   this.gl.bindTexture(this.gl.TEXTURE_2D, this.tileMapTexture);
   this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.R8UI, this.MAP_WIDTH, this.MAP_HEIGHT, 0, this.gl.RED_INTEGER, this.gl.UNSIGNED_BYTE, data);
   this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
 }
-
   
   // Frustum culling
   updateTrigCache(camera) {
@@ -1165,6 +1178,21 @@ for (let i = 0; i < this.tileMap.length; i++) {
   return this.rotatable_billboards_set.has(n);
 }
 
+isModel3D(n) {
+  return this.model3d_tiles_set.has(n);
+}
+
+getModel3DConfig(tile) {
+  return this.model3d_config[tile] || {
+    modelName: 'default',
+    scale: 1.0,
+    rotation: { x: 0, y: 0, z: 0 },
+    height: 0,
+    offset: { x: 0, y: 0, z: 0 },  // ← NUEVO: offset para centrar
+    groundTile: 0  // ← NUEVO: tile de suelo (0 = sin suelo)
+  };
+}
+
 getRotatedBillboardSprite(baseTile, cameraAngle, billboardX, billboardY, fixedOrientation = null) {
   let relativeAngle;
   let needsMapping = false;
@@ -1205,6 +1233,7 @@ getRotatedBillboardSprite(baseTile, cameraAngle, billboardX, billboardY, fixedOr
   // Retornar el tile base + offset del sprite correcto
   return baseTile + spriteOffset;
 }
+
 collectRenderableObjects(camera, independentObjects = []) {
   this.objectCount = 0;
   const camX = camera.x;
@@ -1217,8 +1246,7 @@ collectRenderableObjects(camera, independentObjects = []) {
   const minY = Math.max(0, Math.floor(camY - maxDist));
   const maxY = Math.min(this.MAP_HEIGHT - 1, Math.ceil(camY + maxDist));
   
-  // ✅ OPTIMIZACIÓN 6: Pre-calcular sprite rotado para billboards
-  const billboardCache = new Map(); // Cachear cálculos de sprites rotados
+  const billboardCache = new Map();
   
   if (this.tileMap) {
     for (let mapY = minY; mapY <= maxY; mapY++) {
@@ -1243,9 +1271,114 @@ collectRenderableObjects(camera, independentObjects = []) {
         if (screenX < -this.FRUSTUM_MARGIN || screenX > (1.0 + this.FRUSTUM_MARGIN)) continue;
         
         const heightMapValue = this.heightMap ? (this.heightMap[i] || 0.0) : 0.0;
-        
+
+        // Procesar modelos 3D
+        if (this.isModel3D(tile)) {
+          const config = this.getModel3DConfig(tile);
+          const modelHeight = config.height !== undefined ? config.height : heightMapValue;
+          const offset = config.offset || { x: 0, y: 0, z: 0 };
+          const groundTile = config.groundTile || 0;
+          
+          if (groundTile !== 0 && modelHeight > 0) {
+            
+            // Verificar si necesita rampa en el TOPE de la columna
+            if (this.RAMP_ENABLED) {
+              const rampInfo = this.getRampType(mapX, mapY, modelHeight);
+              
+              if (rampInfo.type !== this.RAMP_TYPES.NONE) {
+                const neighbors = this.getNeighborHeights(mapX, mapY);
+                const baseHeight = Math.min(
+                  neighbors.north, neighbors.east, neighbors.south, neighbors.west
+                );
+                
+                if (modelHeight - baseHeight === 1) {
+                  // Crear bloques base (desde 0 hasta baseHeight)
+                  if (baseHeight > 0) {
+                    this.tempObjects[this.objectCount++] = {
+                      type: 'block',
+                      x: worldX,
+                      y: 0.0,
+                      z: worldY,
+                      tile: groundTile,
+                      dist: distSq,
+                      customHeight: baseHeight
+                    };
+                  }
+                  
+                  // Crear rampa en el tope
+                  this.tempObjects[this.objectCount++] = {
+                    type: 'ramp',
+                    x: worldX,
+                    y: baseHeight,
+                    z: worldY,
+                    tile: groundTile,
+                    dist: distSq,
+                    rampInfo: rampInfo,
+                    baseHeight: baseHeight,
+                    targetHeight: modelHeight
+                  };
+                  
+                  // Añadir el modelo DESPUÉS de la rampa
+                  this.tempObjects[this.objectCount++] = {
+                    type: 'model3d',
+                    modelName: config.modelName,
+                    x: worldX + offset.x,
+                    y: modelHeight + offset.y,
+                    z: worldY + offset.z,
+                    tile: tile,
+                    scale: config.scale || 1.0,
+                    rotation: config.rotation || { x: 0, y: 0, z: 0 },
+                    dist: distSq
+                  };
+                  
+                  continue;
+                }
+              }
+            }
+            
+            // Si no es rampa, crear bloque completo desde 0 hasta modelHeight
+            this.tempObjects[this.objectCount++] = {
+              type: 'block',
+              x: worldX,
+              y: 0.0,
+              z: worldY,
+              tile: groundTile,
+              dist: distSq,
+              customHeight: modelHeight
+            };
+            
+            // Añadir el modelo EN LA ALTURA CORRECTA
+            this.tempObjects[this.objectCount++] = {
+              type: 'model3d',
+              modelName: config.modelName,
+              x: worldX + offset.x,
+              y: modelHeight + offset.y,
+              z: worldY + offset.z,
+              tile: tile,
+              scale: config.scale || 1.0,
+              rotation: config.rotation || { x: 0, y: 0, z: 0 },
+              dist: distSq
+            };
+          } else {
+            // Si NO hay altura, modelo al nivel del suelo
+            this.tempObjects[this.objectCount++] = {
+              type: 'model3d',
+              modelName: config.modelName,
+              x: worldX + offset.x,
+              y: offset.y,
+              z: worldY + offset.z,
+              tile: tile,
+              scale: config.scale || 1.0,
+              rotation: config.rotation || { x: 0, y: 0, z: 0 },
+              dist: distSq
+            };
+          }
+          
+          continue;
+        }
+
+        // Procesar billboards
         if (this.isBillboard(tile)) {
-          // Billboards: detectar si necesitan rampa en el suelo
           const groundElevation = heightMapValue;
           const groundTile = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
           
@@ -1309,12 +1442,10 @@ collectRenderableObjects(camera, independentObjects = []) {
             finalGroundHeight = groundElevation + blockHeight;
           }
           
-          // ✅ OPTIMIZACIÓN 7: Calcular projection una sola vez
           const proj = this.projectToScreenWithHeight(worldX, worldY, finalGroundHeight, camera);
           if (proj.size < BILLBOARD_MINIM_SIZE) continue;
 
           if (proj.visible) {
-            // Cachear cálculo de sprite rotado
             let finalTile = tile;
             if (this.isRotatableBillboard(tile)) {
               const cacheKey = `${tile}_${Math.floor(camera.angle * 100)}`;
@@ -1336,7 +1467,9 @@ collectRenderableObjects(camera, independentObjects = []) {
               scale: scale
             };
           }
-        } else if (this.isBlock(tile)) {
+        } 
+        // Procesar bloques
+        else if (this.isBlock(tile)) {
           if (this.RAMP_ENABLED && heightMapValue > 0) {
             const rampInfo = this.getRampType(mapX, mapY, heightMapValue);
 
@@ -1392,8 +1525,9 @@ collectRenderableObjects(camera, independentObjects = []) {
             dist: distSq,
             customHeight: customHeight
           };
-        } else {
-          // Tile de suelo - detectar si debe convertirse en rampa o bloque
+        } 
+        // Procesar tiles de suelo
+        else {
           if (heightMapValue > 0) {
             if (this.RAMP_ENABLED) {
               const rampInfo = this.getRampType(mapX, mapY, heightMapValue);
@@ -1483,7 +1617,6 @@ collectRenderableObjects(camera, independentObjects = []) {
         if (this.isRotatableBillboard(obj.tile)) {
           const fixedAngle = obj.orientation !== undefined ? obj.orientation : null;
           
-          // ✅ Cachear también objetos independientes si no tienen orientación fija
           if (fixedAngle === null) {
             const cacheKey = `${obj.tile}_${Math.floor(camera.angle * 100)}`;
             if (!billboardCache.has(cacheKey)) {
@@ -1516,25 +1649,25 @@ collectRenderableObjects(camera, independentObjects = []) {
         tile: obj.tile,
         dist: distSq
       };
-    }else if (obj.type === 'model3d') {
-        this.tempObjects[this.objectCount++] = {
-          type: 'model3d',
-          modelName: obj.modelName,
-          x: worldX,
-          y: height,
-          z: worldY,
-          tile: obj.tile,
-          scale: obj.scale || 1.0,
-          rotation: obj.rotation || { x: 0, y: 0, z: 0 },
-          dist: distSq
-        };}
+    } else if (obj.type === 'model3d') {
+      this.tempObjects[this.objectCount++] = {
+        type: 'model3d',
+        modelName: obj.modelName,
+        x: worldX,
+        y: height,
+        z: worldY,
+        tile: obj.tile,
+        scale: obj.scale || 1.0,
+        rotation: obj.rotation || { x: 0, y: 0, z: 0 },
+        dist: distSq
+      };
+    }
   }
   
   const objects = this.tempObjects.slice(0, this.objectCount);
   objects.sort((a, b) => b.dist - a.dist);
   return objects;
 }
-
 
 drawModel3DInstanced(modelName, instances, camera) {
   if (!instances || instances.length === 0) return;

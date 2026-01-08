@@ -247,10 +247,36 @@ const MAP_HEIGHT = 200;
 tileMap = TileMaps["isla"].layers[0].data
 tileMap = tileMap.map(t => t === 43 ? [43,45,46,47][Math.random() * 4 | 0] : t);
 
-  const ei = TileMaps["isla"].layers[1].data.map(v => v > 47 ? v - 47 : v);
+  const ei = TileMaps["isla"].layers[1].data.map(v => v > 49 ? v - 49 : v);
 // Crear el motor
 const canvas = document.getElementById('glCanvas');
 const engine = new Glitter7engine(canvas, {
+
+  //modelo 3d
+    model3dTiles: [48,49],
+    model3dConfig: {
+    48: {
+      modelName: 'cat',
+      scale: 0.1,
+      rotation: { x: 1.5, y: Math.PI / 4, z: 0 },
+     // height: 0,  // Altura base (o usa heightMap)
+      offset: { x: 0, y: -0.2, z: 0.1 },  // Ajustar posición para centrar
+      groundTile: 2  // Tile 5 como suelo debajo del árbol
+    },
+    49: {
+      modelName: 'tree',
+      scale: 0.3,
+      rotation: { x: 0, y: 0 / 4, z: 0 },
+     // height: 0,  // Altura base (o usa heightMap)
+      offset: { x: 0, y: -0.2, z: 0.1 },  // Ajustar posición para centrar
+      groundTile: 2  // Tile 5 como suelo debajo del árbol
+    }
+  
+  
+  },
+
+
+
   waterTiles: [1], // Si tienes más tiles de agua
 waterSpeed: 0.8,   // Más rápido
 waterWave: 0.2,    // Olas más pronunciadas
@@ -309,7 +335,8 @@ heightMap: ei
 // Cargar recursos
 //imageToBase64("img/img_cielo.png", (img) => engine.loadSkydomeTexture(img))
 imageToBase64("img/carretera1.png", (img) => engine.loadSpritesheet(img))
- engine.loadModel('cat', 'model/cat/cat.obj', true,0.3);
+ engine.loadModel('cat', 'model/cat/cat.obj');
+ engine.loadModel('tree', 'model/tree/tree.obj');
 
 
 
