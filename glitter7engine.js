@@ -240,7 +240,7 @@ getModelVS() {
   out vec3 v_normal;
   out vec3 v_worldPos;
   
-  mat4 rotationMatrix(vec3 rotation) {
+mat4 rotationMatrix(vec3 rotation) {
     float cx = cos(rotation.x);
     float sx = sin(rotation.x);
     float cy = cos(rotation.y);
@@ -269,7 +269,8 @@ getModelVS() {
       0.0, 0.0, 0.0, 1.0
     );
     
-    return rz * ry * rx;
+    // Orden corregido: Y -> X -> Z para rotación más predecible
+    return ry * rx * rz;
   }
   
   void main() {
