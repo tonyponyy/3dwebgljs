@@ -362,7 +362,7 @@ void main() {
   
   float spriteWidth = 1.0 / u_spriteCount;
   vec2 uv = v_texCoord;
-  
+  uv.y = 1.0 - uv.y;
   // DEBUG: Visualizar las coordenadas UV
    //outColor = vec4(uv.x, uv.y, 0.0, 1.0);
    //return;
@@ -707,7 +707,6 @@ getBlockVS() {
   }`;
 }
 
-
 getBlockFS() {
   return `#version 300 es
   precision highp float;
@@ -732,22 +731,14 @@ getBlockFS() {
   uniform vec3 u_fogColor;
   uniform vec4 u_camera;
   
-  // ═══════════════════════════════════════
-  // AMBIENT OCCLUSION MINIMALISTA
-  // Solo en caras laterales y base, SIN patrón de baldosas
-  // ═══════════════════════════════════════
   float calculateAO() {
     vec3 localPos = fract(v_worldPos);
-    
-    // AO SOLO basado en altura (gradiente vertical)
     float heightFactor = smoothstep(0.0, 0.4, localPos.y);
     float ao = mix(0.8, 1.0, heightFactor);
     
-    // Caras laterales: más oscuras (basado en normal, no en posición)
     if (abs(v_normal.y) < 0.3) {
-      ao *= 0.93;  // Caras verticales más oscuras
+      ao *= 0.93;
     }
-    // Cara superior: sin AO (completamente uniforme)
     else if (v_normal.y > 0.9) {
       ao = 1.0;
     }
@@ -760,31 +751,26 @@ getBlockFS() {
     
     float spriteWidth = 1.0 / u_spriteCount;
     vec2 uv = vec2(v_texCoord.x * spriteWidth, fract(v_texCoord.y));
+    
+    // ✅ AÑADIR ESTA LÍNEA - Invertir coordenada Y
+    uv.y = 1.0 - uv.y;
+    
     uv.x += float(u_spriteIndex - 1) * spriteWidth;
     
     vec4 color = texture(u_spritesheet, uv);
     if (color.a < 0.1) discard;
     
     vec3 finalColor = color.rgb;
-    
-    // ═══════════════════════════════════════
-    // Aplicar AMBIENT OCCLUSION
-    // ═══════════════════════════════════════
     float ao = calculateAO();
     finalColor *= ao;
     
-    // Aplicar iluminación
     if (u_illumination) {
       float diffuseLight = max(dot(v_normal, u_lightDir), 0.0);
       float lighting = u_ambient + diffuseLight * u_diffuse;
       finalColor *= lighting;
     }
     
-    // ═══════════════════════════════════════
-    // NIEBLA CON DEGRADADO DE ALTURA
-    // ═══════════════════════════════════════
     if (u_fogEnabled) {
-      // Factor de altura (más niebla cerca del suelo)
       float heightFactor = 1.0 - clamp(u_camera.z / 10.0, 0.0, 1.0);
       float enhancedFogEnd = u_fogEnd * (1.0 + heightFactor * 0.5);
       
@@ -795,6 +781,8 @@ getBlockFS() {
     outColor = vec4(finalColor, color.a);
   }`;
 }
+
+
 
   initBuffers() {
     // Buffer para el quad del suelo y cielo
