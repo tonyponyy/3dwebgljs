@@ -137,6 +137,8 @@
   </style>
 </head>
 <body>
+  <!-- Controles móviles 
+<canvas id="glCanvas" width="960" height="540"></canvas>-->
 <canvas id="glCanvas" width="960" height="540"></canvas>
 
 <!-- Controles móviles -->
@@ -239,21 +241,23 @@ const MAP_HEIGHT = 200;
 <script src="collision.js"></script>
 <script src="glitter7engine.js"></script>
 <script src="camera.js"></script>
-<script src="player2.js"></script>
+
 <script src="controls.js"></script>
+<script src="playermodel3d.js"></script>
 
 <script>
+  /*<script src="player2.js"><script>*/
 // Recursos
 tileMap = TileMaps["isla"].layers[0].data
 tileMap = tileMap.map(t => t === 43 ? [43,45,46,47][Math.random() * 4 | 0] : t);
 
-  const ei = TileMaps["isla"].layers[1].data.map(v => v > 49 ? v - 49 : v);
+  const ei = TileMaps["isla"].layers[1].data.map(v => v > 51 ? v - 51 : v);
 // Crear el motor
 const canvas = document.getElementById('glCanvas');
 const engine = new Glitter7engine(canvas, {
 
   //modelo 3d
-    model3dTiles: [48,49],
+    model3dTiles: [48,49,50,51],
     model3dConfig: {
     48: {
       modelName: 'cat',
@@ -270,10 +274,43 @@ const engine = new Glitter7engine(canvas, {
      // height: 0,  // Altura base (o usa heightMap)
       offset: { x: 0, y: -0.2, z: 0.1 },  // Ajustar posición para centrar
       groundTile: 2  // Tile 5 como suelo debajo del árbol
+    },/*
+    50: {
+      modelName: 'tree3',
+      scale: 10.3,
+      rotation: { x: 0, y: 11 , z: 0 },
+     // height: 0,  // Altura base (o usa heightMap)
+      offset: { x: 0, y: 3, z: -4 },  // Ajustar posición para centrar
+      groundTile: 2  // Tile 5 como suelo debajo del árbol
+    }*/
+    50: {
+      modelName: 'tree3',
+      scale: 0.6,
+      rotation: { x: 0, y: 11 , z: 0 },
+     // height: 0,  // Altura base (o usa heightMap)
+      offset: { x: 0, y: 0, z: -4 },  // Ajustar posición para centrar
+      groundTile: 2  // Tile 5 como suelo debajo del árbol
+    },
+        51: {
+      modelName: 'coche',
+      scale: 0.6,
+      rotation: { x: 0, y: 11 , z: 0 },
+     // height: 0,  // Altura base (o usa heightMap)
+      offset: { x: 0, y: 0, z: -4 },  // Ajustar posición para centrar
+      groundTile: 2  // Tile 5 como suelo debajo del árbol
     }
   
   
+  
   },
+  cellShading: {
+  enabled: true,
+  bands: 4,  // 2-8 niveles de luz
+  contour: 2,  // píxeles de grosor, o false
+  contourColor: [0.0, 0.0, 0.0],  // color del borde
+  specular: true,  // brillo opcional
+  specularSize: 0.1
+},
 
 
 
@@ -337,23 +374,36 @@ heightMap: ei
 imageToBase64("img/carretera1.png", (img) => engine.loadSpritesheet(img))
  engine.loadModel('cat', 'model/cat/cat.obj');
  engine.loadModel('tree', 'model/tree/tree.obj');
+ engine.loadModel('tree2', 'model/tree/arbolcono.obj');
+ engine.loadModel('tree3', 'model/tree/arbol4.obj');
+  engine.loadModel('coche', 'model/tree/coche1.obj');
+
 
 
 
 // Objetos independientes
-let playerObject = { tile: 6, x: 109.99, y: 149, z: 10.0,scale:0.5,orientation:0.29 };
+//let playerObject = { tile: 6, x: 109.99, y: 149, z: 10.0,scale:0.5,orientation:0.29 };
+let playerObject = {
+  type: 'model3d',
+  modelName: 'coche',
+  x: 109.99,
+  y: 149,
+  z: 1,  // ← CAMBIO 1: Elevar el coche
+  tile: 51,
+  scale: 0.5,
+  rotation: { x: 0, y: 0, z: 0 }
+};
 
 const independentObjects = [
-  playerObject ,
+  playerObject,  // ← CAMBIO 2: Asegurar que esté aquí primero
   engine.createModelInstance('cat', 124, 103, 5, { 
-    scale: 0.15, 
-    tile: 48 ,
-    rotation: { x: 1.5, y: 0, z: 0 } //,rotation :{x:1.5,y:0,x:0}// Sprite para textura del árbol
-  }),        // Triple de tamaño (override de billboardScales)
-  
+    scale: 2.15, 
+    tile: 48,
+    rotation: { x: 1.5, y: 0, z: 0 }
+  })
 ];
 
-const player = initPlayer(playerObject, tileMap, independentObjects);
+let player = initPlayer(playerObject, tileMap, independentObjects);
 //applyMovementPreset('REALISTIC');
 
 // Loop de render
