@@ -1,45 +1,41 @@
-                                                                                                                                                                
-//   ▄████  ▄▄    ▄▄ ▄▄▄▄▄▄ ▄▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄  ██████ ██████ ▄▄  ▄▄  ▄▄▄▄ ▄▄ ▄▄  ▄▄ ▄▄▄▄▄ 
+//   ▄████  ▄▄    ▄▄ ▄▄▄▄▄▄ ▄▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄  ██████ ██████ ▄▄  ▄▄  ▄▄▄▄ ▄▄ ▄▄  ▄▄ ▄▄▄▄▄
 //  ██  ▄▄▄ ██    ██   ██     ██   ██▄▄  ██▄█▄   ▄██▀ ██▄▄   ███▄██ ██ ▄▄ ██ ███▄██ ██▄▄  V.0.0.1 alpha
 //   ▀███▀  ██▄▄▄ ██   ██     ██   ██▄▄▄ ██ ██  ██▀   ██▄▄▄▄ ██ ▀██ ▀███▀ ██ ██ ▀██ ██▄▄▄  By TonyPonyy
-                                                                                      
-    //constantes
-    const BILLBOARD_MINIM_SIZE = 0.01
-    const FOG_ENABLED_DEFAULT = true;
-    const FOG_START_DEFAULT = 30;
-    const FOG_END_DEFAULT = 80;
-    //const CANVAS_POWER_PREFERENCE_DEFAULT = 'default'; 
-    const CANVAS_POWER_PREFERENCE_DEFAULT ='high-performance'
-    const CANVAS_ANTIALIAS_DEFAULT = true; 
-    const SKYDOME_HORIZONTAL_REP_DEFAULT = '1'
-    const SKYDOME_VERTICAL_REP_DEFAULT = '1'
-    const SKYDOME_RADIUS_DEFAULT = 100;
-    const SKYDOME_SEGMENTS_DEFAULT =32;
-    const SKYDOME_ENABLED_DEFAULT = false;
-    const MAX_RENDER_DISTANCE_DEFAULT = 100;
-    const FRUSTUM_MARGIN_DEFAULT = 0.4;
-    const DEFAULT_BILLBOARD_GROUND_DEFAULT = 0;
-    const WATER_TILES_DEFAULT = [];
-    const WATER_SPEED_DEFAULT = 0.05;
-    const WATER_WAVE_DEFAULT = 0.01;
 
-
+//constantes
+const BILLBOARD_MINIM_SIZE = 0.01;
+const FOG_ENABLED_DEFAULT = true;
+const FOG_START_DEFAULT = 30;
+const FOG_END_DEFAULT = 80;
+const CANVAS_POWER_PREFERENCE_DEFAULT = "high-performance";
+const CANVAS_ANTIALIAS_DEFAULT = true;
+const SKYDOME_HORIZONTAL_REP_DEFAULT = "1";
+const SKYDOME_VERTICAL_REP_DEFAULT = "1";
+const SKYDOME_RADIUS_DEFAULT = 100;
+const SKYDOME_SEGMENTS_DEFAULT = 32;
+const SKYDOME_ENABLED_DEFAULT = false;
+const MAX_RENDER_DISTANCE_DEFAULT = 100;
+const FRUSTUM_MARGIN_DEFAULT = 0.4;
+const DEFAULT_BILLBOARD_GROUND_DEFAULT = 0;
+const WATER_TILES_DEFAULT = [];
+const WATER_SPEED_DEFAULT = 0.05;
+const WATER_WAVE_DEFAULT = 0.01;
 
 class Glitter7engine {
   constructor(canvas, config = {}) {
     this.canvas = canvas;
     //creamos la camara
-    this.camera ={x:0,y:0,z:0,angle:0};
-    
-    // Configuración
-    this.MAX_RENDER_DISTANCE = config.maxRenderDistance || MAX_RENDER_DISTANCE_DEFAULT;
-    this.FRUSTUM_MARGIN = this.transformNumber(( config.frustumMargin || 0.4));
-    this.TILE_SIZE = this.transformNumber(config.tileSize) ;
-    this.MAP_WIDTH = config.map.mapWidth ;
-    this.MAP_HEIGHT = config.map.mapHeight ;
-    this.RENDER_SCALE = this.transformNumber((config.renderScale || 1.0));
+    this.camera = { x: 0, y: 0, z: 0, angle: 0 };
 
-    
+    // Configuración
+    this.MAX_RENDER_DISTANCE =
+      config.maxRenderDistance || MAX_RENDER_DISTANCE_DEFAULT;
+    this.FRUSTUM_MARGIN = this.transformNumber(config.frustumMargin || 0.4);
+    this.TILE_SIZE = this.transformNumber(config.tileSize);
+    this.MAP_WIDTH = config.map.mapWidth;
+    this.MAP_HEIGHT = config.map.mapHeight;
+    this.RENDER_SCALE = this.transformNumber(config.renderScale || 1.0);
+
     // Tiles
     this.billboard_tiles = config.billboardTiles || [];
     this.block_tiles = config.blockTiles || [];
@@ -47,7 +43,8 @@ class Glitter7engine {
     this.block_tiles_set = new Set(this.block_tiles);
     this.tile_heights = config.tileHeights || {};
     this.heightMap = config.heightMap || null;
-    this.DEFAULT_BILLBOARD_GROUND = config.defaultBillboardGround || DEFAULT_BILLBOARD_GROUND_DEFAULT;
+    this.DEFAULT_BILLBOARD_GROUND =
+      config.defaultBillboardGround || DEFAULT_BILLBOARD_GROUND_DEFAULT;
     this.billboard_ground_tiles = config.billboardGroundTiles || {};
     //aguas
     this.water_tiles = config.waterTiles || WATER_TILES_DEFAULT;
@@ -60,87 +57,104 @@ class Glitter7engine {
     this.rotatable_billboards_set = new Set(this.rotatable_billboards);
     this.billboard_scales = config.billboardScales || {}; // {tile: scale}
 
-    //modelos 3d 
+    //modelos 3d
     // NUEVO: Configuración de modelos 3D
     this.model3d_tiles = config.model3dTiles || [];
     this.model3d_tiles_set = new Set(this.model3d_tiles);
     this.model3d_config = config.model3dConfig || {}; // {tile: {modelName, scale, rotation, height}}
 
-  // Tipos de rampas posibles
-      this.RAMP_ENABLED = config.rampEnabled !== undefined ? config.rampEnabled : true;
-  this.RAMP_TYPES = {
-    STRAIGHT: 'straight',      // Rampa recta (1 lado alto, 1 bajo)
-    INNER_CORNER: 'inner',     // Esquina interior (2 lados altos adyacentes)
-    OUTER_CORNER: 'outer',     // Esquina exterior (2 lados bajos adyacentes)
-    NONE: 'none'
-  };
+    // Tipos de rampas posibles
+    this.RAMP_ENABLED =
+      config.rampEnabled !== undefined ? config.rampEnabled : true;
+    this.RAMP_TYPES = {
+      STRAIGHT: "straight", // Rampa recta (1 lado alto, 1 bajo)
+      INNER_CORNER: "inner", // Esquina interior (2 lados altos adyacentes)
+      OUTER_CORNER: "outer", // Esquina exterior (2 lados bajos adyacentes)
+      NONE: "none",
+    };
 
-
-    
     // Iluminación
-    if (config.light !=null){
-      this.ILLUMINATION = config.light.illumination !== undefined ? config.light.illumination : true;
+    if (config.light != null) {
+      this.ILLUMINATION =
+        config.light.illumination !== undefined
+          ? config.light.illumination
+          : true;
       this.AMBIENT_LIGHT = config.light.ambientLight || 0.5;
       this.LIGHT_DIFFUSE = config.light.lightDiffuse || 0.7;
       this.lightDir = config.light.lightDir || [0.3, 0.7, 0.5];
-    }else{
-      this.ILLUMINATION=true,
-      this.AMBIENT_LIGHT =0.5;
+    } else {
+      (this.ILLUMINATION = true), (this.AMBIENT_LIGHT = 0.5);
       this.LIGHT_DIFFUSE = 0.7;
-      this.lightDir = [0.3, 0.7, 0.5]
+      this.lightDir = [0.3, 0.7, 0.5];
     }
-     
-    if (config.camera){
+
+    if (config.camera) {
       this.camera.x = config.camera.x || 0;
       this.camera.y = config.camera.y || 0;
       this.camera.z = config.camera.z || 0;
-      this.angle =  config.camera.angle || 0;
+      this.angle = config.camera.angle || 0;
     }
-    
+
     // Colores del cielo
-    if (config.background != null){
-      this.color1 = config.background.color1 || [0.5, 0.7, 1.0];
-      this.color2 = config.background.color2 || this.color1;
-    }else{
+    if (config.background != null) {
+      this.color1 = this.normalizeColor(config.background.color1) || [
+        0.5, 0.7, 1.0,
+      ];
+      this.color2 =
+        this.normalizeColor(config.background.color2) || this.color1;
+    } else {
       this.color1 = [0.5, 0.7, 1.0];
       this.color2 = this.color1;
     }
-    
+
     // Skydome
-    if (config.skydome){
-      this.SKYDOME_ENABLED = config.skydome.enabled !== undefined ? config.skydome.enabled : SKYDOME_ENABLED_DEFAULT;
+    if (config.skydome) {
+      this.SKYDOME_ENABLED =
+        config.skydome.enabled !== undefined
+          ? config.skydome.enabled
+          : SKYDOME_ENABLED_DEFAULT;
       this.SKYDOME_RADIUS = config.skydome.radius || SKYDOME_RADIUS_DEFAULT;
-      this.SKYDOME_SEGMENTS = config.skydome.segments || SKYDOME_SEGMENTS_DEFAULT;
+      this.SKYDOME_SEGMENTS =
+        config.skydome.segments || SKYDOME_SEGMENTS_DEFAULT;
       this.skydomeTexture = null;
-      this.skydome_rep_h = this.transformNumber( (config.skydome.rep_h || SKYDOME_HORIZONTAL_REP_DEFAULT));
-      this.skydome_vert_ajust = this.transformNumber( (config.skydome.rep_v || SKYDOME_VERTICAL_REP_DEFAULT) );
-    }else{
+      this.skydome_rep_h = this.transformNumber(
+        config.skydome.rep_h || SKYDOME_HORIZONTAL_REP_DEFAULT
+      );
+      this.skydome_vert_ajust = this.transformNumber(
+        config.skydome.rep_v || SKYDOME_VERTICAL_REP_DEFAULT
+      );
+    } else {
       this.SKYDOME_ENABLED = SKYDOME_ENABLED_DEFAULT;
       this.SKYDOME_RADIUS = SKYDOME_RADIUS_DEFAULT;
       this.SKYDOME_SEGMENTS = SKYDOME_SEGMENTS_DEFAULT;
       this.skydomeTexture = null;
       this.skydome_rep_h = this.transformNumber(SKYDOME_HORIZONTAL_REP_DEFAULT);
-      this.skydome_vert_ajust = this.transformNumber(SKYDOME_VERTICAL_REP_DEFAULT);
+      this.skydome_vert_ajust = this.transformNumber(
+        SKYDOME_VERTICAL_REP_DEFAULT
+      );
     }
-        // Niebla
-    if (config.fog){
-      this.FOG_ENABLED = config.fog.enabled !== undefined ? config.fog.enabled : FOG_ENABLED_DEFAULT;
-      this.FOG_START = config.fog.start || FOG_START_DEFAULT;  // Distancia donde empieza la niebla
-      this.FOG_END = config.fog.end || FOG_END_DEFAULT;      // Distancia donde es niebla completa
+    // Niebla
+    if (config.fog) {
+      this.FOG_ENABLED =
+        config.fog.enabled !== undefined
+          ? config.fog.enabled
+          : FOG_ENABLED_DEFAULT;
+      this.FOG_START = config.fog.start || FOG_START_DEFAULT; // Distancia donde empieza la niebla
+      this.FOG_END = config.fog.end || FOG_END_DEFAULT; // Distancia donde es niebla completa
       this.FOG_COLOR = config.fog.color || this.color1; // Color de la niebla
-    }else{
-      this.FOG_ENABLED =  FOG_ENABLED_DEFAULT;
-      this.FOG_START =  FOG_START_DEFAULT;  // Distancia donde empieza la niebla
-      this.FOG_END =  FOG_END_DEFAULT;      // Distancia donde es niebla completa
+    } else {
+      this.FOG_ENABLED = FOG_ENABLED_DEFAULT;
+      this.FOG_START = FOG_START_DEFAULT; // Distancia donde empieza la niebla
+      this.FOG_END = FOG_END_DEFAULT; // Distancia donde es niebla completa
       this.FOG_COLOR = this.color1; // Color de la niebla
     }
-      //this.billboardInstanceData = null; // Se inicializa dinámicamente según necesidad
-      //this.maxBillboardInstances = 20; // Aumentar si tienes más billboards
-      //modelo 3d
-      this.models3D = new Map(); // Caché de modelos cargados
-      this.modelBuffers = new Map(); // Buffers WebGL por modelo
+    //this.billboardInstanceData = null; // Se inicializa dinámicamente según necesidad
+    //this.maxBillboardInstances = 20; // Aumentar si tienes más billboards
+    //modelo 3d
+    this.models3D = new Map(); // Caché de modelos cargados
+    this.modelBuffers = new Map(); // Buffers WebGL por modelo
     // WebGL Context
-    let contextOptions = this.canvas.getContext('webgl2', {
+    let contextOptions = this.canvas.getContext("webgl2", {
       alpha: CANVAS_ANTIALIAS_DEFAULT,
       depth: true,
       stencil: false,
@@ -148,32 +162,32 @@ class Glitter7engine {
       premultipliedAlpha: false,
       preserveDrawingBuffer: false,
       powerPreference: CANVAS_POWER_PREFERENCE_DEFAULT, //''default',low-power,'high-performance',
-      failIfMajorPerformanceCaveat: false // <-- para que en chrome pueda usar la gpu
+      failIfMajorPerformanceCaveat: false, // <-- para que en chrome pueda usar la gpu
     });
-    
-      this.gl = this.canvas.getContext('webgl2', contextOptions);
-  
-  if (!this.gl) {
-    // Fallback a WebGL1
-    console.warn('WebGL2 no disponible, intentando WebGL1...');
-    this.gl = this.canvas.getContext('webgl', contextOptions) || 
-              this.canvas.getContext('experimental-webgl', contextOptions);
-  }
-  
-  if (!this.gl) {
-    throw new Error('WebGL no está disponible en este navegador');
-  }
-  
-  // Verificar extensiones necesarias para WebGL1
-  if (!this.gl.getExtension) {
-    console.warn('Contexto WebGL limitado');
-  }
-  
-  console.log('WebGL Version:', this.gl.getParameter(this.gl.VERSION));
-  console.log('WebGL Vendor:', this.gl.getParameter(this.gl.VENDOR));
-  console.log('WebGL Renderer:', this.gl.getParameter(this.gl.RENDERER));
-  
-    
+
+    this.gl = this.canvas.getContext("webgl2", contextOptions);
+
+    if (!this.gl) {
+      // Fallback a WebGL1
+      console.warn("WebGL2 no disponible, intentando WebGL1...");
+      this.gl =
+        this.canvas.getContext("webgl", contextOptions) ||
+        this.canvas.getContext("experimental-webgl", contextOptions);
+    }
+
+    if (!this.gl) {
+      throw new Error("WebGL no está disponible en este navegador");
+    }
+
+    // Verificar extensiones necesarias para WebGL1
+    if (!this.gl.getExtension) {
+      console.warn("Contexto WebGL limitado");
+    }
+
+    console.log("WebGL Version:", this.gl.getParameter(this.gl.VERSION));
+    console.log("WebGL Vendor:", this.gl.getParameter(this.gl.VENDOR));
+    console.log("WebGL Renderer:", this.gl.getParameter(this.gl.RENDERER));
+
     // Estado interno
     this.tile_items_size = 6;
     this.cachedCosA = 0;
@@ -181,50 +195,91 @@ class Glitter7engine {
     this.cameraAngleCache = 0;
     this.objectCount = 0;
     this.tempObjects = new Array(this.MAP_WIDTH * this.MAP_HEIGHT + 1000);
-    
+
     // Inicializar
-this.initTextures();
-this.initShaders();
-this.initBuffers();
-this.initBillboardInstancing(); // ← AÑADIR ESTA LÍNEA
-this.initUniforms();
-this.setTileMap(config.map.array);
-
-
+    this.initTextures();
+    this.initShaders();
+    this.initBuffers();
+    this.initBillboardInstancing(); // ← AÑADIR ESTA LÍNEA
+    this.initUniforms();
+    this.setTileMap(config.map.array);
   }
-  
+
   initTextures() {
     this.spriteTexture = this.gl.createTexture();
     this.tileMapTexture = this.gl.createTexture();
-    
+
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.tileMapTexture);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+    this.gl.texParameteri(
+      this.gl.TEXTURE_2D,
+      this.gl.TEXTURE_MIN_FILTER,
+      this.gl.NEAREST
+    );
+    this.gl.texParameteri(
+      this.gl.TEXTURE_2D,
+      this.gl.TEXTURE_MAG_FILTER,
+      this.gl.NEAREST
+    );
+    this.gl.texParameteri(
+      this.gl.TEXTURE_2D,
+      this.gl.TEXTURE_WRAP_S,
+      this.gl.CLAMP_TO_EDGE
+    );
+    this.gl.texParameteri(
+      this.gl.TEXTURE_2D,
+      this.gl.TEXTURE_WRAP_T,
+      this.gl.CLAMP_TO_EDGE
+    );
     // Textura del skydome
     this.skydomeTexture = this.gl.createTexture();
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.skydomeTexture);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.REPEAT);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.REPEAT);
-
+    this.gl.texParameteri(
+      this.gl.TEXTURE_2D,
+      this.gl.TEXTURE_MIN_FILTER,
+      this.gl.LINEAR
+    );
+    this.gl.texParameteri(
+      this.gl.TEXTURE_2D,
+      this.gl.TEXTURE_MAG_FILTER,
+      this.gl.LINEAR
+    );
+    this.gl.texParameteri(
+      this.gl.TEXTURE_2D,
+      this.gl.TEXTURE_WRAP_S,
+      this.gl.REPEAT
+    );
+    this.gl.texParameteri(
+      this.gl.TEXTURE_2D,
+      this.gl.TEXTURE_WRAP_T,
+      this.gl.REPEAT
+    );
   }
-  
-initShaders() {
-  // Crear shaders
-  this.program = this.createProgram(this.getGroundVS(), this.getGroundFS());
-  this.billboardProgram = this.createProgram(this.getBillboardVS(), this.getBillboardFS());
-  this.blockProgram = this.createProgram(this.getBlockVS(), this.getBlockFS());
-  this.skyProgram = this.createProgram(this.getSkyVS(), this.getSkyFS());
-  this.skydomeProgram = this.createProgram(this.getSkydomeVS(), this.getSkydomeFS());
-  this.modelProgram = this.createProgram(this.getModelVS(), this.getModelFS()); // ✅ NUEVO
-}
 
-// ✅ NUEVO: Vertex Shader para Modelos 3D
-getModelVS() {
-  return `#version 300 es
+  initShaders() {
+    // Crear shaders
+    this.program = this.createProgram(this.getGroundVS(), this.getGroundFS());
+    this.billboardProgram = this.createProgram(
+      this.getBillboardVS(),
+      this.getBillboardFS()
+    );
+    this.blockProgram = this.createProgram(
+      this.getBlockVS(),
+      this.getBlockFS()
+    );
+    this.skyProgram = this.createProgram(this.getSkyVS(), this.getSkyFS());
+    this.skydomeProgram = this.createProgram(
+      this.getSkydomeVS(),
+      this.getSkydomeFS()
+    );
+    this.modelProgram = this.createProgram(
+      this.getModelVS(),
+      this.getModelFS()
+    ); // ✅ NUEVO
+  }
+
+  // ✅ NUEVO: Vertex Shader para Modelos 3D
+  getModelVS() {
+    return `#version 300 es
   in vec3 a_position;
   in vec2 a_texCoord;
   in vec3 a_normal;
@@ -317,11 +372,11 @@ mat4 rotationMatrix(vec3 rotation) {
     v_depth = rotY;
     v_normal = (rotMat * vec4(a_normal, 0.0)).xyz;
   }`;
-}
+  }
 
-// ✅ NUEVO: Fragment Shader para Modelos 3D (igual que blocks)
-getModelFS() {
-  return `#version 300 es
+  // ✅ NUEVO: Fragment Shader para Modelos 3D (igual que blocks)
+  getModelFS() {
+    return `#version 300 es
   precision highp float;
   in vec2 v_texCoord;
   in float v_depth;
@@ -397,19 +452,19 @@ void main() {
   
   outColor = vec4(finalColor, color.a);
 }`;
-}
-  
+  }
+
   createShader(type, source) {
     const shader = this.gl.createShader(type);
     this.gl.shaderSource(shader, source);
     this.gl.compileShader(shader);
     if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
-      console.error('Shader error:', this.gl.getShaderInfoLog(shader));
+      console.error("Shader error:", this.gl.getShaderInfoLog(shader));
       throw new Error(this.gl.getShaderInfoLog(shader));
     }
     return shader;
   }
-  
+
   createProgram(vsSource, fsSource) {
     const vs = this.createShader(this.gl.VERTEX_SHADER, vsSource);
     const fs = this.createShader(this.gl.FRAGMENT_SHADER, fsSource);
@@ -418,12 +473,12 @@ void main() {
     this.gl.attachShader(program, fs);
     this.gl.linkProgram(program);
     if (!this.gl.getProgramParameter(program, this.gl.LINK_STATUS)) {
-      console.error('Program error:', this.gl.getProgramInfoLog(program));
+      console.error("Program error:", this.gl.getProgramInfoLog(program));
       throw new Error(this.gl.getProgramInfoLog(program));
     }
     return program;
   }
-  
+
   // Métodos para obtener el código de los shaders
   getSkyVS() {
     return `#version 300 es
@@ -434,7 +489,7 @@ void main() {
       gl_Position = vec4(a_position, 0.0, 1.0);
     }`;
   }
-  
+
   getSkyFS() {
     return `#version 300 es
     precision highp float;
@@ -447,8 +502,8 @@ void main() {
       outColor = vec4(mix(u_color1, u_color2, t), 1.0);
     }`;
   }
-getSkydomeVS() {
-  return `#version 300 es
+  getSkydomeVS() {
+    return `#version 300 es
   in vec3 a_position;
   uniform mat4 u_viewMatrix;
   uniform mat4 u_projMatrix;
@@ -460,10 +515,10 @@ getSkydomeVS() {
     vec4 viewPos = u_viewMatrix * worldPos;
     gl_Position = u_projMatrix * viewPos;
   }`;
-}
+  }
 
-getSkydomeFS() {
-  return `#version 300 es
+  getSkydomeFS() {
+    return `#version 300 es
   precision highp float;
   in vec3 v_position;
   out vec4 outColor;
@@ -482,9 +537,8 @@ getSkydomeFS() {
     vec2 texCoord = vec2(u*${this.skydome_rep_h}, v);
     outColor = texture(u_skydomeTexture, texCoord);
   }`;
-}
+  }
 
-  
   getGroundVS() {
     return `#version 300 es
     in vec2 a_position;
@@ -495,12 +549,13 @@ getSkydomeFS() {
     }`;
   }
 
-getGroundFS() {
-  const waterChecks = this.water_tiles.length > 0 
-    ? this.water_tiles.map(tile => `tileIndex == ${tile}u`).join(' || ')
-    : 'false';
-  
-  return `#version 300 es
+  getGroundFS() {
+    const waterChecks =
+      this.water_tiles.length > 0
+        ? this.water_tiles.map((tile) => `tileIndex == ${tile}u`).join(" || ")
+        : "false";
+
+    return `#version 300 es
   precision highp float;
   precision highp usampler2D;
   in vec2 v_texCoord;
@@ -580,10 +635,10 @@ getGroundFS() {
       outColor = baseColor;
     }
   }`;
-}
+  }
 
-getBillboardVS() {
-  return `#version 300 es
+  getBillboardVS() {
+    return `#version 300 es
   in vec2 a_offset;
   in vec4 a_instanceData;
   
@@ -607,10 +662,10 @@ getBillboardVS() {
     v_texCoord = (a_offset + 1.0) * 0.5;
     v_distance = 1.0 / size;
   }`;
-}
+  }
 
-getBillboardFS() {
-  return `#version 300 es
+  getBillboardFS() {
+    return `#version 300 es
   precision highp float;
   in vec2 v_texCoord;
   in float v_distance;
@@ -640,11 +695,10 @@ getBillboardFS() {
       outColor = color;
     }
   }`;
-}
+  }
 
-
-getBlockVS() {
-  return `#version 300 es
+  getBlockVS() {
+    return `#version 300 es
   in vec3 a_position;
   in vec2 a_texCoord;
   in vec3 a_normal;
@@ -705,10 +759,10 @@ getBlockVS() {
     v_height = height;
     v_normal = a_normal;
   }`;
-}
+  }
 
-getBlockFS() {
-  return `#version 300 es
+  getBlockFS() {
+    return `#version 300 es
   precision highp float;
   in vec2 v_texCoord;
   in float v_depth;
@@ -780,33 +834,47 @@ getBlockFS() {
     
     outColor = vec4(finalColor, color.a);
   }`;
-}
-
-
+  }
 
   initBuffers() {
     // Buffer para el quad del suelo y cielo
     this.positionBuffer = this.gl.createBuffer();
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), this.gl.STATIC_DRAW);
-    
+    this.gl.bufferData(
+      this.gl.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+      this.gl.STATIC_DRAW
+    );
+
     // Buffer para billboards
     this.billboardBuffer = this.gl.createBuffer();
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.billboardBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), this.gl.STATIC_DRAW);
-    
+    this.gl.bufferData(
+      this.gl.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
+      this.gl.STATIC_DRAW
+    );
+
     // Buffer para cubos
     this.cubeBuffer = this.gl.createBuffer();
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.cubeBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, this.getCubeVertices(), this.gl.STATIC_DRAW);
-    
+    this.gl.bufferData(
+      this.gl.ARRAY_BUFFER,
+      this.getCubeVertices(),
+      this.gl.STATIC_DRAW
+    );
+
     // Buffer para instancias
     this.instanceBuffer = this.gl.createBuffer();
-    
+
     // Buffer para cielo
     this.skyBuffer = this.gl.createBuffer();
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.skyBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), this.gl.STATIC_DRAW);
+    this.gl.bufferData(
+      this.gl.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+      this.gl.STATIC_DRAW
+    );
     // buffer skydome
     this.skydomeBuffer = this.gl.createBuffer();
     this.skydomeIndexBuffer = this.gl.createBuffer();
@@ -814,294 +882,391 @@ getBlockFS() {
   }
 
   initBillboardInstancing() {
-  this.billboardInstanceBuffer = this.gl.createBuffer();
-  this.maxBillboardInstances = 1000; // Ajustable según tu escena
-}
-  
+    this.billboardInstanceBuffer = this.gl.createBuffer();
+    this.maxBillboardInstances = 1000; // Ajustable según tu escena
+  }
+
   getCubeVertices() {
     return new Float32Array([
       // Cara frontal (Z+) - Normal: (0, 0, 1)
-      -0.5, 0.0,  0.5,  0, 0,  0, 0, 1,
-       0.5, 0.0,  0.5,  1, 0,  0, 0, 1,
-       0.5, 1.0,  0.5,  1, 1,  0, 0, 1,
-      -0.5, 0.0,  0.5,  0, 0,  0, 0, 1,
-       0.5, 1.0,  0.5,  1, 1,  0, 0, 1,
-      -0.5, 1.0,  0.5,  0, 1,  0, 0, 1,
-      
+      -0.5, 0.0, 0.5, 0, 0, 0, 0, 1, 0.5, 0.0, 0.5, 1, 0, 0, 0, 1, 0.5, 1.0,
+      0.5, 1, 1, 0, 0, 1, -0.5, 0.0, 0.5, 0, 0, 0, 0, 1, 0.5, 1.0, 0.5, 1, 1, 0,
+      0, 1, -0.5, 1.0, 0.5, 0, 1, 0, 0, 1,
+
       // Cara trasera (Z-) - Normal: (0, 0, -1)
-       0.5, 0.0, -0.5,  1, 0,  0, 0, -1,
-      -0.5, 0.0, -0.5,  0, 0,  0, 0, -1,
-      -0.5, 1.0, -0.5,  0, 1,  0, 0, -1,
-       0.5, 0.0, -0.5,  1, 0,  0, 0, -1,
-      -0.5, 1.0, -0.5,  0, 1,  0, 0, -1,
-       0.5, 1.0, -0.5,  1, 1,  0, 0, -1,
-      
+      0.5, 0.0, -0.5, 1, 0, 0, 0, -1, -0.5, 0.0, -0.5, 0, 0, 0, 0, -1, -0.5,
+      1.0, -0.5, 0, 1, 0, 0, -1, 0.5, 0.0, -0.5, 1, 0, 0, 0, -1, -0.5, 1.0,
+      -0.5, 0, 1, 0, 0, -1, 0.5, 1.0, -0.5, 1, 1, 0, 0, -1,
+
       // Cara izquierda (X-) - Normal: (-1, 0, 0)
-      -0.5, 0.0, -0.5,  0, 0,  -1, 0, 0,
-      -0.5, 0.0,  0.5,  1, 0,  -1, 0, 0,
-      -0.5, 1.0,  0.5,  1, 1,  -1, 0, 0,
-      -0.5, 0.0, -0.5,  0, 0,  -1, 0, 0,
-      -0.5, 1.0,  0.5,  1, 1,  -1, 0, 0,
-      -0.5, 1.0, -0.5,  0, 1,  -1, 0, 0,
-      
+      -0.5, 0.0, -0.5, 0, 0, -1, 0, 0, -0.5, 0.0, 0.5, 1, 0, -1, 0, 0, -0.5,
+      1.0, 0.5, 1, 1, -1, 0, 0, -0.5, 0.0, -0.5, 0, 0, -1, 0, 0, -0.5, 1.0, 0.5,
+      1, 1, -1, 0, 0, -0.5, 1.0, -0.5, 0, 1, -1, 0, 0,
+
       // Cara derecha (X+) - Normal: (1, 0, 0)
-       0.5, 0.0,  0.5,  0, 0,  1, 0, 0,
-       0.5, 0.0, -0.5,  1, 0,  1, 0, 0,
-       0.5, 1.0, -0.5,  1, 1,  1, 0, 0,
-       0.5, 0.0,  0.5,  0, 0,  1, 0, 0,
-       0.5, 1.0, -0.5,  1, 1,  1, 0, 0,
-       0.5, 1.0,  0.5,  0, 1,  1, 0, 0,
-      
+      0.5, 0.0, 0.5, 0, 0, 1, 0, 0, 0.5, 0.0, -0.5, 1, 0, 1, 0, 0, 0.5, 1.0,
+      -0.5, 1, 1, 1, 0, 0, 0.5, 0.0, 0.5, 0, 0, 1, 0, 0, 0.5, 1.0, -0.5, 1, 1,
+      1, 0, 0, 0.5, 1.0, 0.5, 0, 1, 1, 0, 0,
+
       // Cara superior (Y+) - Normal: (0, 1, 0)
-      -0.5, 1.0,  0.5,  0, 0,  0, 1, 0,
-       0.5, 1.0,  0.5,  1, 0,  0, 1, 0,
-       0.5, 1.0, -0.5,  1, 1,  0, 1, 0,
-      -0.5, 1.0,  0.5,  0, 0,  0, 1, 0,
-       0.5, 1.0, -0.5,  1, 1,  0, 1, 0,
-      -0.5, 1.0, -0.5,  0, 1,  0, 1, 0,
-      
+      -0.5, 1.0, 0.5, 0, 0, 0, 1, 0, 0.5, 1.0, 0.5, 1, 0, 0, 1, 0, 0.5, 1.0,
+      -0.5, 1, 1, 0, 1, 0, -0.5, 1.0, 0.5, 0, 0, 0, 1, 0, 0.5, 1.0, -0.5, 1, 1,
+      0, 1, 0, -0.5, 1.0, -0.5, 0, 1, 0, 1, 0,
+
       // Cara inferior (Y-) - Normal: (0, -1, 0)
-      -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
-       0.5, 0.0, -0.5,  1, 0,  0, -1, 0,
-       0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
-      -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
-       0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
-      -0.5, 0.0,  0.5,  0, 1,  0, -1, 0
+      -0.5, 0.0, -0.5, 0, 0, 0, -1, 0, 0.5, 0.0, -0.5, 1, 0, 0, -1, 0, 0.5, 0.0,
+      0.5, 1, 1, 0, -1, 0, -0.5, 0.0, -0.5, 0, 0, 0, -1, 0, 0.5, 0.0, 0.5, 1, 1,
+      0, -1, 0, -0.5, 0.0, 0.5, 0, 1, 0, -1, 0,
     ]);
   }
-createSkydomeGeometry() {
-  const vertices = [];
-  const indices = [];
-  const radius = this.SKYDOME_RADIUS;
-  const segments = this.SKYDOME_SEGMENTS;
-  const rings = Math.floor(segments / 2);
-  
-  // Generar vértices (evitando los polos exactos)
-  for (let ring = 0; ring <= rings; ring++) {
-    const phi = (ring / rings) * Math.PI * 0.95; // 0.95 para evitar singularidad en polos
-    const y = radius * Math.cos(phi);
-    const ringRadius = radius * Math.sin(phi);
-    
-    for (let seg = 0; seg <= segments; seg++) {
-      const theta = (seg / segments) * Math.PI * 2;
-      const x = ringRadius * Math.cos(theta);
-      const z = ringRadius * Math.sin(theta);
-      
-      vertices.push(x, y, z);
-    }
-  }
-  
-  // Generar índices
-  for (let ring = 0; ring < rings; ring++) {
-    for (let seg = 0; seg < segments; seg++) {
-      const current = ring * (segments + 1) + seg;
-      const next = current + segments + 1;
-      
-      indices.push(current, next, current + 1);
-      indices.push(current + 1, next, next + 1);
-    }
-  }
-  
-  this.skydomeVertexCount = indices.length;
-  
-  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.skydomeBuffer);
-  this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(vertices), this.gl.STATIC_DRAW);
-  
-  this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.skydomeIndexBuffer);
-  this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), this.gl.STATIC_DRAW);
-}
-  
-  initUniforms() {
-      this.uniformLocations = {
-    skydome: {
-      viewMatrix: this.gl.getUniformLocation(this.skydomeProgram, 'u_viewMatrix'),
-      projMatrix: this.gl.getUniformLocation(this.skydomeProgram, 'u_projMatrix'),
-      skydomeTexture: this.gl.getUniformLocation(this.skydomeProgram, 'u_skydomeTexture')
-    },
-    ground: {
-      time: this.gl.getUniformLocation(this.program, 'u_time'),
-      spriteCount: this.gl.getUniformLocation(this.program, 'u_spriteCount'),
-      camera: this.gl.getUniformLocation(this.program, 'u_camera'),
-      tileMapTexture: this.gl.getUniformLocation(this.program, 'u_tileMapTexture'),
-      spritesheet: this.gl.getUniformLocation(this.program, 'u_spritesheet'),
-      fogEnabled: this.gl.getUniformLocation(this.program, 'u_fogEnabled'),
-      fogStart: this.gl.getUniformLocation(this.program, 'u_fogStart'),
-      fogEnd: this.gl.getUniformLocation(this.program, 'u_fogEnd'),
-      fogColor: this.gl.getUniformLocation(this.program, 'u_fogColor')
-    },
-billboard: {
-  spriteIndex: this.gl.getUniformLocation(this.billboardProgram, 'u_spriteIndex'),
-  spriteCount: this.gl.getUniformLocation(this.billboardProgram, 'u_spriteCount'),
-  spritesheet: this.gl.getUniformLocation(this.billboardProgram, 'u_spritesheet'),
-  fogEnabled: this.gl.getUniformLocation(this.billboardProgram, 'u_fogEnabled'),
-  fogStart: this.gl.getUniformLocation(this.billboardProgram, 'u_fogStart'),
-  fogEnd: this.gl.getUniformLocation(this.billboardProgram, 'u_fogEnd'),
-  fogColor: this.gl.getUniformLocation(this.billboardProgram, 'u_fogColor')
-  // ← ELIMINAR: screenPos, size, scale, distance (ya no se usan)
-},
+  createSkydomeGeometry() {
+    const vertices = [];
+    const indices = [];
+    const radius = this.SKYDOME_RADIUS;
+    const segments = this.SKYDOME_SEGMENTS;
+    const rings = Math.floor(segments / 2);
 
-    block: {
-      camera: this.gl.getUniformLocation(this.blockProgram, 'u_camera'),
-      resolution: this.gl.getUniformLocation(this.blockProgram, 'u_resolution'),
-      spriteIndex: this.gl.getUniformLocation(this.blockProgram, 'u_spriteIndex'),
-      spriteCount: this.gl.getUniformLocation(this.blockProgram, 'u_spriteCount'),
-      spritesheet: this.gl.getUniformLocation(this.blockProgram, 'u_spritesheet'),
-      lightDir: this.gl.getUniformLocation(this.blockProgram, 'u_lightDir'),
-      illumination: this.gl.getUniformLocation(this.blockProgram, 'u_illumination'),
-      ambient: this.gl.getUniformLocation(this.blockProgram, 'u_ambient'),
-      diffuse: this.gl.getUniformLocation(this.blockProgram, 'u_diffuse'),
-      fogEnabled: this.gl.getUniformLocation(this.blockProgram, 'u_fogEnabled'),
-      fogStart: this.gl.getUniformLocation(this.blockProgram, 'u_fogStart'),
-      fogEnd: this.gl.getUniformLocation(this.blockProgram, 'u_fogEnd'),
-      fogColor: this.gl.getUniformLocation(this.blockProgram, 'u_fogColor')
-    },
-    sky: {
-      color1: this.gl.getUniformLocation(this.skyProgram, 'u_color1'),
-      color2: this.gl.getUniformLocation(this.skyProgram, 'u_color2')
-    },
-    model: {
-      camera: this.gl.getUniformLocation(this.modelProgram, 'u_camera'),
-      resolution: this.gl.getUniformLocation(this.modelProgram, 'u_resolution'),
-      modelPos: this.gl.getUniformLocation(this.modelProgram, 'u_modelPos'),
-      modelScale: this.gl.getUniformLocation(this.modelProgram, 'u_modelScale'),
-      modelRotation: this.gl.getUniformLocation(this.modelProgram, 'u_modelRotation'),
-      spriteIndex: this.gl.getUniformLocation(this.modelProgram, 'u_spriteIndex'),
-      spriteCount: this.gl.getUniformLocation(this.modelProgram, 'u_spriteCount'),
-      spritesheet: this.gl.getUniformLocation(this.modelProgram, 'u_spritesheet'),
-      lightDir: this.gl.getUniformLocation(this.modelProgram, 'u_lightDir'),
-      illumination: this.gl.getUniformLocation(this.modelProgram, 'u_illumination'),
-      ambient: this.gl.getUniformLocation(this.modelProgram, 'u_ambient'),
-      diffuse: this.gl.getUniformLocation(this.modelProgram, 'u_diffuse'),
-      fogEnabled: this.gl.getUniformLocation(this.modelProgram, 'u_fogEnabled'),
-      fogStart: this.gl.getUniformLocation(this.modelProgram, 'u_fogStart'),
-      fogEnd: this.gl.getUniformLocation(this.modelProgram, 'u_fogEnd'),
-      fogColor: this.gl.getUniformLocation(this.modelProgram, 'u_fogColor')
+    // Generar vértices (evitando los polos exactos)
+    for (let ring = 0; ring <= rings; ring++) {
+      const phi = (ring / rings) * Math.PI * 0.95; // 0.95 para evitar singularidad en polos
+      const y = radius * Math.cos(phi);
+      const ringRadius = radius * Math.sin(phi);
+
+      for (let seg = 0; seg <= segments; seg++) {
+        const theta = (seg / segments) * Math.PI * 2;
+        const x = ringRadius * Math.cos(theta);
+        const z = ringRadius * Math.sin(theta);
+
+        vertices.push(x, y, z);
+      }
     }
-  };
-    
+
+    // Generar índices
+    for (let ring = 0; ring < rings; ring++) {
+      for (let seg = 0; seg < segments; seg++) {
+        const current = ring * (segments + 1) + seg;
+        const next = current + segments + 1;
+
+        indices.push(current, next, current + 1);
+        indices.push(current + 1, next, next + 1);
+      }
+    }
+
+    this.skydomeVertexCount = indices.length;
+
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.skydomeBuffer);
+    this.gl.bufferData(
+      this.gl.ARRAY_BUFFER,
+      new Float32Array(vertices),
+      this.gl.STATIC_DRAW
+    );
+
+    this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.skydomeIndexBuffer);
+    this.gl.bufferData(
+      this.gl.ELEMENT_ARRAY_BUFFER,
+      new Uint16Array(indices),
+      this.gl.STATIC_DRAW
+    );
+  }
+
+  initUniforms() {
+    this.uniformLocations = {
+      skydome: {
+        viewMatrix: this.gl.getUniformLocation(
+          this.skydomeProgram,
+          "u_viewMatrix"
+        ),
+        projMatrix: this.gl.getUniformLocation(
+          this.skydomeProgram,
+          "u_projMatrix"
+        ),
+        skydomeTexture: this.gl.getUniformLocation(
+          this.skydomeProgram,
+          "u_skydomeTexture"
+        ),
+      },
+      ground: {
+        time: this.gl.getUniformLocation(this.program, "u_time"),
+        spriteCount: this.gl.getUniformLocation(this.program, "u_spriteCount"),
+        camera: this.gl.getUniformLocation(this.program, "u_camera"),
+        tileMapTexture: this.gl.getUniformLocation(
+          this.program,
+          "u_tileMapTexture"
+        ),
+        spritesheet: this.gl.getUniformLocation(this.program, "u_spritesheet"),
+        fogEnabled: this.gl.getUniformLocation(this.program, "u_fogEnabled"),
+        fogStart: this.gl.getUniformLocation(this.program, "u_fogStart"),
+        fogEnd: this.gl.getUniformLocation(this.program, "u_fogEnd"),
+        fogColor: this.gl.getUniformLocation(this.program, "u_fogColor"),
+      },
+      billboard: {
+        spriteIndex: this.gl.getUniformLocation(
+          this.billboardProgram,
+          "u_spriteIndex"
+        ),
+        spriteCount: this.gl.getUniformLocation(
+          this.billboardProgram,
+          "u_spriteCount"
+        ),
+        spritesheet: this.gl.getUniformLocation(
+          this.billboardProgram,
+          "u_spritesheet"
+        ),
+        fogEnabled: this.gl.getUniformLocation(
+          this.billboardProgram,
+          "u_fogEnabled"
+        ),
+        fogStart: this.gl.getUniformLocation(
+          this.billboardProgram,
+          "u_fogStart"
+        ),
+        fogEnd: this.gl.getUniformLocation(this.billboardProgram, "u_fogEnd"),
+        fogColor: this.gl.getUniformLocation(
+          this.billboardProgram,
+          "u_fogColor"
+        ),
+        // ← ELIMINAR: screenPos, size, scale, distance (ya no se usan)
+      },
+
+      block: {
+        camera: this.gl.getUniformLocation(this.blockProgram, "u_camera"),
+        resolution: this.gl.getUniformLocation(
+          this.blockProgram,
+          "u_resolution"
+        ),
+        spriteIndex: this.gl.getUniformLocation(
+          this.blockProgram,
+          "u_spriteIndex"
+        ),
+        spriteCount: this.gl.getUniformLocation(
+          this.blockProgram,
+          "u_spriteCount"
+        ),
+        spritesheet: this.gl.getUniformLocation(
+          this.blockProgram,
+          "u_spritesheet"
+        ),
+        lightDir: this.gl.getUniformLocation(this.blockProgram, "u_lightDir"),
+        illumination: this.gl.getUniformLocation(
+          this.blockProgram,
+          "u_illumination"
+        ),
+        ambient: this.gl.getUniformLocation(this.blockProgram, "u_ambient"),
+        diffuse: this.gl.getUniformLocation(this.blockProgram, "u_diffuse"),
+        fogEnabled: this.gl.getUniformLocation(
+          this.blockProgram,
+          "u_fogEnabled"
+        ),
+        fogStart: this.gl.getUniformLocation(this.blockProgram, "u_fogStart"),
+        fogEnd: this.gl.getUniformLocation(this.blockProgram, "u_fogEnd"),
+        fogColor: this.gl.getUniformLocation(this.blockProgram, "u_fogColor"),
+      },
+      sky: {
+        color1: this.gl.getUniformLocation(this.skyProgram, "u_color1"),
+        color2: this.gl.getUniformLocation(this.skyProgram, "u_color2"),
+      },
+      model: {
+        camera: this.gl.getUniformLocation(this.modelProgram, "u_camera"),
+        resolution: this.gl.getUniformLocation(
+          this.modelProgram,
+          "u_resolution"
+        ),
+        modelPos: this.gl.getUniformLocation(this.modelProgram, "u_modelPos"),
+        modelScale: this.gl.getUniformLocation(
+          this.modelProgram,
+          "u_modelScale"
+        ),
+        modelRotation: this.gl.getUniformLocation(
+          this.modelProgram,
+          "u_modelRotation"
+        ),
+        spriteIndex: this.gl.getUniformLocation(
+          this.modelProgram,
+          "u_spriteIndex"
+        ),
+        spriteCount: this.gl.getUniformLocation(
+          this.modelProgram,
+          "u_spriteCount"
+        ),
+        spritesheet: this.gl.getUniformLocation(
+          this.modelProgram,
+          "u_spritesheet"
+        ),
+        lightDir: this.gl.getUniformLocation(this.modelProgram, "u_lightDir"),
+        illumination: this.gl.getUniformLocation(
+          this.modelProgram,
+          "u_illumination"
+        ),
+        ambient: this.gl.getUniformLocation(this.modelProgram, "u_ambient"),
+        diffuse: this.gl.getUniformLocation(this.modelProgram, "u_diffuse"),
+        fogEnabled: this.gl.getUniformLocation(
+          this.modelProgram,
+          "u_fogEnabled"
+        ),
+        fogStart: this.gl.getUniformLocation(this.modelProgram, "u_fogStart"),
+        fogEnd: this.gl.getUniformLocation(this.modelProgram, "u_fogEnd"),
+        fogColor: this.gl.getUniformLocation(this.modelProgram, "u_fogColor"),
+      },
+    };
+
     this.attribLocations = {
       skydome: {
-        position: this.gl.getAttribLocation(this.skydomeProgram, 'a_position')
+        position: this.gl.getAttribLocation(this.skydomeProgram, "a_position"),
       },
 
       ground: {
-        position: this.gl.getAttribLocation(this.program, 'a_position')
+        position: this.gl.getAttribLocation(this.program, "a_position"),
       },
       billboard: {
-            offset: this.gl.getAttribLocation(this.billboardProgram, 'a_offset'),
-  instanceData: this.gl.getAttribLocation(this.billboardProgram, 'a_instanceData') // ← AÑADIR
-
-
+        offset: this.gl.getAttribLocation(this.billboardProgram, "a_offset"),
+        instanceData: this.gl.getAttribLocation(
+          this.billboardProgram,
+          "a_instanceData"
+        ), // ← AÑADIR
       },
       block: {
-        position: this.gl.getAttribLocation(this.blockProgram, 'a_position'),
-        texCoord: this.gl.getAttribLocation(this.blockProgram, 'a_texCoord'),
-        normal: this.gl.getAttribLocation(this.blockProgram, 'a_normal'),
-        instanceData: this.gl.getAttribLocation(this.blockProgram, 'a_instanceData')
+        position: this.gl.getAttribLocation(this.blockProgram, "a_position"),
+        texCoord: this.gl.getAttribLocation(this.blockProgram, "a_texCoord"),
+        normal: this.gl.getAttribLocation(this.blockProgram, "a_normal"),
+        instanceData: this.gl.getAttribLocation(
+          this.blockProgram,
+          "a_instanceData"
+        ),
       },
       sky: {
-        position: this.gl.getAttribLocation(this.skyProgram, 'a_position')
+        position: this.gl.getAttribLocation(this.skyProgram, "a_position"),
       },
-          model: {
-      position: this.gl.getAttribLocation(this.modelProgram, 'a_position'),
-      texCoord: this.gl.getAttribLocation(this.modelProgram, 'a_texCoord'),
-      normal: this.gl.getAttribLocation(this.modelProgram, 'a_normal')
-    }
+      model: {
+        position: this.gl.getAttribLocation(this.modelProgram, "a_position"),
+        texCoord: this.gl.getAttribLocation(this.modelProgram, "a_texCoord"),
+        normal: this.gl.getAttribLocation(this.modelProgram, "a_normal"),
+      },
     };
   }
-  
+
   // Cargar imagen del spritesheet
   loadSpritesheet(imageSource) {
     return new Promise((resolve, reject) => {
       const image = new Image();
-      
+
       image.onload = () => {
         this.tile_items_size = Math.floor(image.width / this.TILE_SIZE);
         this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
-        this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST); 
+        this.gl.texImage2D(
+          this.gl.TEXTURE_2D,
+          0,
+          this.gl.RGBA,
+          this.gl.RGBA,
+          this.gl.UNSIGNED_BYTE,
+          image
+        );
+        this.gl.texParameteri(
+          this.gl.TEXTURE_2D,
+          this.gl.TEXTURE_MIN_FILTER,
+          this.gl.NEAREST
+        );
+        this.gl.texParameteri(
+          this.gl.TEXTURE_2D,
+          this.gl.TEXTURE_MAG_FILTER,
+          this.gl.NEAREST
+        );
 
-      //this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_LINEAR); // Mejor calidad
-      //this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR); // Suaviza al acercar
-      
-     // this.gl.generateMipmap(this.gl.TEXTURE_2D); // Genera mipmaps para distancias
+        //this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_LINEAR); // Mejor calidad
+        //this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR); // Suaviza al acercar
 
-        
+        // this.gl.generateMipmap(this.gl.TEXTURE_2D); // Genera mipmaps para distancias
+
         resolve();
       };
-      
-      image.onerror = () => reject(new Error('Error al cargar spritesheet'));
+
+      image.onerror = () => reject(new Error("Error al cargar spritesheet"));
       image.src = imageSource;
     });
   }
   loadSkydomeTexture(imageSource) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    
-    image.onload = () => {
-      this.gl.bindTexture(this.gl.TEXTURE_2D, this.skydomeTexture);
-      this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
-      this.gl.generateMipmap(this.gl.TEXTURE_2D);
-      resolve();
-    };
-    
-    image.onerror = () => reject(new Error('Error al cargar textura del skydome'));
-    image.src = imageSource;
-  });
-}
-  
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+
+      image.onload = () => {
+        this.gl.bindTexture(this.gl.TEXTURE_2D, this.skydomeTexture);
+        this.gl.texImage2D(
+          this.gl.TEXTURE_2D,
+          0,
+          this.gl.RGBA,
+          this.gl.RGBA,
+          this.gl.UNSIGNED_BYTE,
+          image
+        );
+        this.gl.generateMipmap(this.gl.TEXTURE_2D);
+        resolve();
+      };
+
+      image.onerror = () =>
+        reject(new Error("Error al cargar textura del skydome"));
+      image.src = imageSource;
+    });
+  }
+
   // Actualizar el tilemap
   setTileMap(tileMap) {
     this.tileMap = tileMap;
     this.updateTileMapTexture();
   }
 
-
   updateTileMapTexture() {
-  if (!this.tileMap) return;
-  
-  const data = new Uint8Array(this.MAP_WIDTH * this.MAP_HEIGHT);
-  for (let i = 0; i < this.tileMap.length; i++) {
-    const tile = this.tileMap[i];
-    const heightMapValue = this.heightMap ? (this.heightMap[i] || 0.0) : 0.0;
-    
-    // Si es un billboard, poner el tile de suelo correspondiente
-    if (this.isBillboard(tile)) {
-      // Si hay altura, no renderizar suelo (se renderiza como bloque)
-      if (heightMapValue > 0) {
-        data[i] = 0; // Transparente
-      } else {
-        data[i] = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
+    if (!this.tileMap) return;
+
+    const data = new Uint8Array(this.MAP_WIDTH * this.MAP_HEIGHT);
+    for (let i = 0; i < this.tileMap.length; i++) {
+      const tile = this.tileMap[i];
+      const heightMapValue = this.heightMap ? this.heightMap[i] || 0.0 : 0.0;
+
+      // Si es un billboard, poner el tile de suelo correspondiente
+      if (this.isBillboard(tile)) {
+        // Si hay altura, no renderizar suelo (se renderiza como bloque)
+        if (heightMapValue > 0) {
+          data[i] = 0; // Transparente
+        } else {
+          data[i] =
+            this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
+        }
       }
-    } 
-    // ✅ AÑADIR: Manejo de modelos 3D
-    else if (this.isModel3D(tile)) {
-      // Los modelos 3D usan groundTile de su configuración
-      const config = this.getModel3DConfig(tile);
-      data[i] = config.groundTile || 0;
-    }
-    else if (this.isBlock(tile)) {
-      // Los bloques no se renderizan en el suelo
-      data[i] = 0;
-    } else {
-      // Tile de suelo normal
-      // Si tiene altura en heightMap, no renderizar en suelo (se convierte en bloque)
-      if (heightMapValue > 0) {
+      // ✅ AÑADIR: Manejo de modelos 3D
+      else if (this.isModel3D(tile)) {
+        // Los modelos 3D usan groundTile de su configuración
+        const config = this.getModel3DConfig(tile);
+        data[i] = config.groundTile || 0;
+      } else if (this.isBlock(tile)) {
+        // Los bloques no se renderizan en el suelo
         data[i] = 0;
       } else {
-        data[i] = tile;
+        // Tile de suelo normal
+        // Si tiene altura en heightMap, no renderizar en suelo (se convierte en bloque)
+        if (heightMapValue > 0) {
+          data[i] = 0;
+        } else {
+          data[i] = tile;
+        }
       }
     }
+
+    this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.tileMapTexture);
+    this.gl.texImage2D(
+      this.gl.TEXTURE_2D,
+      0,
+      this.gl.R8UI,
+      this.MAP_WIDTH,
+      this.MAP_HEIGHT,
+      0,
+      this.gl.RED_INTEGER,
+      this.gl.UNSIGNED_BYTE,
+      data
+    );
+    this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
   }
-  
-  this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
-  this.gl.bindTexture(this.gl.TEXTURE_2D, this.tileMapTexture);
-  this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.R8UI, this.MAP_WIDTH, this.MAP_HEIGHT, 0, this.gl.RED_INTEGER, this.gl.UNSIGNED_BYTE, data);
-  this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
-}
-  
+
   // Frustum culling
   updateTrigCache(camera) {
     if (this.cameraAngleCache !== camera.angle) {
@@ -1110,193 +1275,328 @@ billboard: {
       this.cachedSinA = Math.sin(-camera.angle);
     }
   }
-    
+
   // Proyección
   projectToScreen(worldX, worldY, camera) {
     const dx = worldX - camera.x;
     const dy = worldY - camera.y;
-    
+
     const rotX = dx * this.cachedCosA - dy * this.cachedSinA;
     const rotY = dx * this.cachedSinA + dy * this.cachedCosA;
-    
+
     const horizon = 0.3;
     const invRotY = 1.0 / (rotY - 0.001);
     const perspective = camera.z * invRotY;
-    
+
     const screenX = 0.5 + rotX * invRotY;
     const screenY = 1.0 - (horizon + perspective);
-    
+
     return {
-      visible: rotY > -3 && screenX >= -3 && screenX <= 1 && screenY >= -3 && screenY <= 1,
+      visible:
+        rotY > -3 &&
+        screenX >= -3 &&
+        screenX <= 1 &&
+        screenY >= -3 &&
+        screenY <= 1,
       x: screenX,
       y: screenY,
-      size: invRotY
+      size: invRotY,
     };
   }
-  
+
   projectToScreenWithHeight(worldX, worldY, height, camera) {
     const dx = worldX - camera.x;
     const dy = worldY - camera.y;
-    
+
     const rotX = dx * this.cachedCosA - dy * this.cachedSinA;
     const rotY = dx * this.cachedSinA + dy * this.cachedCosA;
-    
+
     const horizon = 0.3;
     const invRotY = 1.0 / (rotY - 0.001);
     const perspective = (camera.z - height) * invRotY;
-    
+
     const screenX = 0.5 + rotX * invRotY;
     const screenY = 1.0 - (horizon + perspective);
-    
+
     return {
-      visible: rotY > 0.01 && screenX >= 0 && screenX <= 1 && screenY >= -3 && screenY <= 1,
+      visible:
+        rotY > 0.01 &&
+        screenX >= 0 &&
+        screenX <= 1 &&
+        screenY >= -3 &&
+        screenY <= 1,
       x: screenX,
       y: screenY,
-      size: invRotY
+      size: invRotY,
     };
   }
-  
+
   isBillboard(n) {
     return this.billboard_tiles_set.has(n);
   }
-  
+
   isBlock(n) {
     return this.block_tiles_set.has(n);
   }
   isRotatableBillboard(n) {
-  return this.rotatable_billboards_set.has(n);
-}
-
-isModel3D(n) {
-  return this.model3d_tiles_set.has(n);
-}
-
-getModel3DConfig(tile) {
-  return this.model3d_config[tile] || {
-    modelName: 'default',
-    scale: 1.0,
-    rotation: { x: 0, y: 0, z: 0 },
-    height: 0,
-    offset: { x: 0, y: 0, z: 0 },  // ← NUEVO: offset para centrar
-    groundTile: 0  // ← NUEVO: tile de suelo (0 = sin suelo)
-  };
-}
-
-getRotatedBillboardSprite(baseTile, cameraAngle, billboardX, billboardY, fixedOrientation = null) {
-  let relativeAngle;
-  let needsMapping = false;
-  
-  if (fixedOrientation !== null) {
-    // Usar la orientación fija del billboard
-    // El billboard "mira" en la dirección fixedOrientation
-    // Calculamos el ángulo relativo a la cámara
-    relativeAngle = fixedOrientation - cameraAngle;
-  } else {
-    // El billboard siempre mira hacia la cámara (comportamiento automático)
-    // Calculamos desde dónde viene la cámara respecto al billboard
-    const dx = this.lastCamera.x - billboardX;
-    const dy = this.lastCamera.y - billboardY;
-    const angleFromBillboardToCamera = Math.atan2(dy, dx);
-    relativeAngle = angleFromBillboardToCamera;
-    needsMapping = true; // Solo los billboards automáticos necesitan el mapeo invertido
+    return this.rotatable_billboards_set.has(n);
   }
-  
-  // Normalizar el ángulo relativo (0 a 2π)
-  while (relativeAngle < 0) relativeAngle += Math.PI * 2;
-  while (relativeAngle >= Math.PI * 2) relativeAngle -= Math.PI * 2;
-  
-  // Dividir en 4 cuadrantes (cada uno de 90 grados = π/2)
-  const quadrant = Math.floor((relativeAngle + Math.PI / 4) / (Math.PI / 2)) % 4;
-  
-  let spriteOffset;
-  if (needsMapping) {
-    // Para billboards automáticos (del tilemap), invertir izquierda/derecha
-    // Asumiendo que tus sprites están ordenados: frente, derecha, atrás, izquierda
-    const spriteMap = [0, 3, 2, 1];
-    spriteOffset = spriteMap[quadrant];
-  } else {
-    // Para billboards con orientación fija, usar directamente el cuadrante
-    spriteOffset = quadrant;
+
+  isModel3D(n) {
+    return this.model3d_tiles_set.has(n);
   }
-  
-  // Retornar el tile base + offset del sprite correcto
-  return baseTile + spriteOffset;
-}
 
-collectRenderableObjects(camera, independentObjects = []) {
-  this.objectCount = 0;
-  const camX = camera.x;
-  const camY = camera.y;
-  const maxDistSq = this.MAX_RENDER_DISTANCE * this.MAX_RENDER_DISTANCE;
-  
-  const maxDist = this.MAX_RENDER_DISTANCE;
-  const minX = Math.max(0, Math.floor(camX - maxDist));
-  const maxX = Math.min(this.MAP_WIDTH - 1, Math.ceil(camX + maxDist));
-  const minY = Math.max(0, Math.floor(camY - maxDist));
-  const maxY = Math.min(this.MAP_HEIGHT - 1, Math.ceil(camY + maxDist));
-  
-  const billboardCache = new Map();
-  
-  if (this.tileMap) {
-    for (let mapY = minY; mapY <= maxY; mapY++) {
-      for (let mapX = minX; mapX <= maxX; mapX++) {
-        const i = mapY * this.MAP_WIDTH + mapX;
-        const tile = this.tileMap[i];
-        if (tile === 0) continue;
-        
-        const worldX = mapX + 0.5;
-        const worldY = mapY + 0.5;
-        const dx = worldX - camX;
-        const dy = worldY - camY;
-        const distSq = dx * dx + dy * dy;
-        
-        if (distSq > maxDistSq) continue;
-        
-        const rotY = dx * this.cachedSinA + dy * this.cachedCosA;
-        if (rotY < 0.1) continue;
-        
-        const rotX = dx * this.cachedCosA - dy * this.cachedSinA;
-        const screenX = 0.5 + rotX / rotY;
-        if (screenX < -this.FRUSTUM_MARGIN || screenX > (1.0 + this.FRUSTUM_MARGIN)) continue;
-        
-        const heightMapValue = this.heightMap ? (this.heightMap[i] || 0.0) : 0.0;
+  getModel3DConfig(tile) {
+    return (
+      this.model3d_config[tile] || {
+        modelName: "default",
+        scale: 1.0,
+        rotation: { x: 0, y: 0, z: 0 },
+        height: 0,
+        offset: { x: 0, y: 0, z: 0 }, // ← NUEVO: offset para centrar
+        groundTile: 0, // ← NUEVO: tile de suelo (0 = sin suelo)
+      }
+    );
+  }
 
-        // Procesar modelos 3D
-        if (this.isModel3D(tile)) {
-          const config = this.getModel3DConfig(tile);
-          const modelHeight = config.height !== undefined ? config.height : heightMapValue;
-          const offset = config.offset || { x: 0, y: 0, z: 0 };
-          const groundTile = config.groundTile || 0;
-          
-          if (groundTile !== 0 && modelHeight > 0) {
-            
-            // Verificar si necesita rampa en el TOPE de la columna
-            if (this.RAMP_ENABLED) {
-              const rampInfo = this.getRampType(mapX, mapY, modelHeight);
-              
+  getRotatedBillboardSprite(
+    baseTile,
+    cameraAngle,
+    billboardX,
+    billboardY,
+    fixedOrientation = null
+  ) {
+    let relativeAngle;
+    let needsMapping = false;
+
+    if (fixedOrientation !== null) {
+      // Usar la orientación fija del billboard
+      // El billboard "mira" en la dirección fixedOrientation
+      // Calculamos el ángulo relativo a la cámara
+      relativeAngle = fixedOrientation - cameraAngle;
+    } else {
+      // El billboard siempre mira hacia la cámara (comportamiento automático)
+      // Calculamos desde dónde viene la cámara respecto al billboard
+      const dx = this.lastCamera.x - billboardX;
+      const dy = this.lastCamera.y - billboardY;
+      const angleFromBillboardToCamera = Math.atan2(dy, dx);
+      relativeAngle = angleFromBillboardToCamera;
+      needsMapping = true; // Solo los billboards automáticos necesitan el mapeo invertido
+    }
+
+    // Normalizar el ángulo relativo (0 a 2π)
+    while (relativeAngle < 0) relativeAngle += Math.PI * 2;
+    while (relativeAngle >= Math.PI * 2) relativeAngle -= Math.PI * 2;
+
+    // Dividir en 4 cuadrantes (cada uno de 90 grados = π/2)
+    const quadrant =
+      Math.floor((relativeAngle + Math.PI / 4) / (Math.PI / 2)) % 4;
+
+    let spriteOffset;
+    if (needsMapping) {
+      // Para billboards automáticos (del tilemap), invertir izquierda/derecha
+      // Asumiendo que tus sprites están ordenados: frente, derecha, atrás, izquierda
+      const spriteMap = [0, 3, 2, 1];
+      spriteOffset = spriteMap[quadrant];
+    } else {
+      // Para billboards con orientación fija, usar directamente el cuadrante
+      spriteOffset = quadrant;
+    }
+
+    // Retornar el tile base + offset del sprite correcto
+    return baseTile + spriteOffset;
+  }
+
+  collectRenderableObjects(camera, independentObjects = []) {
+    this.objectCount = 0;
+    const camX = camera.x;
+    const camY = camera.y;
+    const maxDistSq = this.MAX_RENDER_DISTANCE * this.MAX_RENDER_DISTANCE;
+
+    const maxDist = this.MAX_RENDER_DISTANCE;
+    const minX = Math.max(0, Math.floor(camX - maxDist));
+    const maxX = Math.min(this.MAP_WIDTH - 1, Math.ceil(camX + maxDist));
+    const minY = Math.max(0, Math.floor(camY - maxDist));
+    const maxY = Math.min(this.MAP_HEIGHT - 1, Math.ceil(camY + maxDist));
+
+    const billboardCache = new Map();
+
+    if (this.tileMap) {
+      for (let mapY = minY; mapY <= maxY; mapY++) {
+        for (let mapX = minX; mapX <= maxX; mapX++) {
+          const i = mapY * this.MAP_WIDTH + mapX;
+          const tile = this.tileMap[i];
+          if (tile === 0) continue;
+
+          const worldX = mapX + 0.5;
+          const worldY = mapY + 0.5;
+          const dx = worldX - camX;
+          const dy = worldY - camY;
+          const distSq = dx * dx + dy * dy;
+
+          if (distSq > maxDistSq) continue;
+
+          const rotY = dx * this.cachedSinA + dy * this.cachedCosA;
+          if (rotY < 0.1) continue;
+
+          const rotX = dx * this.cachedCosA - dy * this.cachedSinA;
+          const screenX = 0.5 + rotX / rotY;
+          if (
+            screenX < -this.FRUSTUM_MARGIN ||
+            screenX > 1.0 + this.FRUSTUM_MARGIN
+          )
+            continue;
+
+          const heightMapValue = this.heightMap
+            ? this.heightMap[i] || 0.0
+            : 0.0;
+
+          // Procesar modelos 3D
+          if (this.isModel3D(tile)) {
+            const config = this.getModel3DConfig(tile);
+            const modelHeight =
+              config.height !== undefined ? config.height : heightMapValue;
+            const offset = config.offset || { x: 0, y: 0, z: 0 };
+            const groundTile = config.groundTile || 0;
+
+            if (groundTile !== 0 && modelHeight > 0) {
+              // Verificar si necesita rampa en el TOPE de la columna
+              if (this.RAMP_ENABLED) {
+                const rampInfo = this.getRampType(mapX, mapY, modelHeight);
+
+                if (rampInfo.type !== this.RAMP_TYPES.NONE) {
+                  const neighbors = this.getNeighborHeights(mapX, mapY);
+                  const baseHeight = Math.min(
+                    neighbors.north,
+                    neighbors.east,
+                    neighbors.south,
+                    neighbors.west
+                  );
+
+                  if (modelHeight - baseHeight === 1) {
+                    // Crear bloques base (desde 0 hasta baseHeight)
+                    if (baseHeight > 0) {
+                      this.tempObjects[this.objectCount++] = {
+                        type: "block",
+                        x: worldX,
+                        y: 0.0,
+                        z: worldY,
+                        tile: groundTile,
+                        dist: distSq,
+                        customHeight: baseHeight,
+                      };
+                    }
+
+                    // Crear rampa en el tope
+                    this.tempObjects[this.objectCount++] = {
+                      type: "ramp",
+                      x: worldX,
+                      y: baseHeight,
+                      z: worldY,
+                      tile: groundTile,
+                      dist: distSq,
+                      rampInfo: rampInfo,
+                      baseHeight: baseHeight,
+                      targetHeight: modelHeight,
+                    };
+
+                    // Añadir el modelo DESPUÉS de la rampa
+                    this.tempObjects[this.objectCount++] = {
+                      type: "model3d",
+                      modelName: config.modelName,
+                      x: worldX + offset.x,
+                      y: modelHeight + offset.y,
+                      z: worldY + offset.z,
+                      tile: tile,
+                      scale: config.scale || 1.0,
+                      rotation: config.rotation || { x: 0, y: 0, z: 0 },
+                      dist: distSq,
+                    };
+
+                    continue;
+                  }
+                }
+              }
+
+              // Si no es rampa, crear bloque completo desde 0 hasta modelHeight
+              this.tempObjects[this.objectCount++] = {
+                type: "block",
+                x: worldX,
+                y: 0.0,
+                z: worldY,
+                tile: groundTile,
+                dist: distSq,
+                customHeight: modelHeight,
+              };
+
+              // Añadir el modelo EN LA ALTURA CORRECTA
+              this.tempObjects[this.objectCount++] = {
+                type: "model3d",
+                modelName: config.modelName,
+                x: worldX + offset.x,
+                y: modelHeight + offset.y,
+                z: worldY + offset.z,
+                tile: tile,
+                scale: config.scale || 1.0,
+                rotation: config.rotation || { x: 0, y: 0, z: 0 },
+                dist: distSq,
+              };
+            } else {
+              // Si NO hay altura, modelo al nivel del suelo
+              this.tempObjects[this.objectCount++] = {
+                type: "model3d",
+                modelName: config.modelName,
+                x: worldX + offset.x,
+                y: offset.y,
+                z: worldY + offset.z,
+                tile: tile,
+                scale: config.scale || 1.0,
+                rotation: config.rotation || { x: 0, y: 0, z: 0 },
+                dist: distSq,
+              };
+            }
+
+            continue;
+          }
+
+          // Procesar billboards
+          if (this.isBillboard(tile)) {
+            const groundElevation = heightMapValue;
+            const groundTile =
+              this.billboard_ground_tiles[tile] ||
+              this.DEFAULT_BILLBOARD_GROUND;
+
+            let groundIsRamp = false;
+            let finalGroundHeight = groundElevation;
+
+            if (this.RAMP_ENABLED && groundElevation > 0 && groundTile !== 0) {
+              const rampInfo = this.getRampType(mapX, mapY, groundElevation);
+
               if (rampInfo.type !== this.RAMP_TYPES.NONE) {
                 const neighbors = this.getNeighborHeights(mapX, mapY);
                 const baseHeight = Math.min(
-                  neighbors.north, neighbors.east, neighbors.south, neighbors.west
+                  neighbors.north,
+                  neighbors.east,
+                  neighbors.south,
+                  neighbors.west
                 );
-                
-                if (modelHeight - baseHeight === 1) {
-                  // Crear bloques base (desde 0 hasta baseHeight)
+
+                const targetHeight = groundElevation;
+                if (targetHeight - baseHeight === 1) {
                   if (baseHeight > 0) {
                     this.tempObjects[this.objectCount++] = {
-                      type: 'block',
+                      type: "block",
                       x: worldX,
                       y: 0.0,
                       z: worldY,
                       tile: groundTile,
                       dist: distSq,
-                      customHeight: baseHeight
+                      customHeight: baseHeight,
                     };
                   }
-                  
-                  // Crear rampa en el tope
+
                   this.tempObjects[this.objectCount++] = {
-                    type: 'ramp',
+                    type: "ramp",
                     x: worldX,
                     y: baseHeight,
                     z: worldY,
@@ -1304,221 +1604,73 @@ collectRenderableObjects(camera, independentObjects = []) {
                     dist: distSq,
                     rampInfo: rampInfo,
                     baseHeight: baseHeight,
-                    targetHeight: modelHeight
+                    targetHeight: groundElevation,
                   };
-                  
-                  // Añadir el modelo DESPUÉS de la rampa
-                  this.tempObjects[this.objectCount++] = {
-                    type: 'model3d',
-                    modelName: config.modelName,
-                    x: worldX + offset.x,
-                    y: modelHeight + offset.y,
-                    z: worldY + offset.z,
-                    tile: tile,
-                    scale: config.scale || 1.0,
-                    rotation: config.rotation || { x: 0, y: 0, z: 0 },
-                    dist: distSq
-                  };
-                  
-                  continue;
+                  groundIsRamp = true;
+                  finalGroundHeight = groundElevation;
                 }
               }
             }
-            
-            // Si no es rampa, crear bloque completo desde 0 hasta modelHeight
-            this.tempObjects[this.objectCount++] = {
-              type: 'block',
-              x: worldX,
-              y: 0.0,
-              z: worldY,
-              tile: groundTile,
-              dist: distSq,
-              customHeight: modelHeight
-            };
-            
-            // Añadir el modelo EN LA ALTURA CORRECTA
-            this.tempObjects[this.objectCount++] = {
-              type: 'model3d',
-              modelName: config.modelName,
-              x: worldX + offset.x,
-              y: modelHeight + offset.y,
-              z: worldY + offset.z,
-              tile: tile,
-              scale: config.scale || 1.0,
-              rotation: config.rotation || { x: 0, y: 0, z: 0 },
-              dist: distSq
-            };
-          } else {
-            // Si NO hay altura, modelo al nivel del suelo
-            this.tempObjects[this.objectCount++] = {
-              type: 'model3d',
-              modelName: config.modelName,
-              x: worldX + offset.x,
-              y: offset.y,
-              z: worldY + offset.z,
-              tile: tile,
-              scale: config.scale || 1.0,
-              rotation: config.rotation || { x: 0, y: 0, z: 0 },
-              dist: distSq
-            };
-          }
-          
-          continue;
-        }
 
-        // Procesar billboards
-        if (this.isBillboard(tile)) {
-          const groundElevation = heightMapValue;
-          const groundTile = this.billboard_ground_tiles[tile] || this.DEFAULT_BILLBOARD_GROUND;
-          
-          let groundIsRamp = false;
-          let finalGroundHeight = groundElevation;
-          
-          if (this.RAMP_ENABLED && groundElevation > 0 && groundTile !== 0) {
-            const rampInfo = this.getRampType(mapX, mapY, groundElevation);
-            
-            if (rampInfo.type !== this.RAMP_TYPES.NONE) {
-              const neighbors = this.getNeighborHeights(mapX, mapY);
-              const baseHeight = Math.min(
-                neighbors.north,
-                neighbors.east,
-                neighbors.south,
-                neighbors.west
-              );
-              
-              const targetHeight = groundElevation;
-              if (targetHeight - baseHeight === 1) {  
-                if (baseHeight > 0) {
-                  this.tempObjects[this.objectCount++] = {
-                    type: 'block',
-                    x: worldX,
-                    y: 0.0,
-                    z: worldY,
-                    tile: groundTile,
-                    dist: distSq,
-                    customHeight: baseHeight
-                  };
+            if (!groundIsRamp && groundElevation > 0 && groundTile !== 0) {
+              this.tempObjects[this.objectCount++] = {
+                type: "block",
+                x: worldX,
+                y: 0.0,
+                z: worldY,
+                tile: groundTile,
+                dist: distSq,
+                customHeight: groundElevation,
+              };
+              const blockHeight = this.isBlock(groundTile)
+                ? this.tile_heights[groundTile] || 0.0
+                : 0.0;
+              finalGroundHeight = groundElevation + blockHeight;
+            }
+
+            const proj = this.projectToScreenWithHeight(
+              worldX,
+              worldY,
+              finalGroundHeight,
+              camera
+            );
+            if (proj.size < BILLBOARD_MINIM_SIZE) continue;
+
+            if (proj.visible) {
+              let finalTile = tile;
+              if (this.isRotatableBillboard(tile)) {
+                const cacheKey = `${tile}_${Math.floor(camera.angle * 100)}`;
+                if (!billboardCache.has(cacheKey)) {
+                  billboardCache.set(
+                    cacheKey,
+                    this.getRotatedBillboardSprite(
+                      tile,
+                      camera.angle,
+                      worldX,
+                      worldY,
+                      null
+                    )
+                  );
                 }
-                
-                this.tempObjects[this.objectCount++] = {
-                  type: 'ramp',
-                  x: worldX,
-                  y: baseHeight,
-                  z: worldY,
-                  tile: groundTile,
-                  dist: distSq,
-                  rampInfo: rampInfo,
-                  baseHeight: baseHeight,
-                  targetHeight: groundElevation
-                };
-                groundIsRamp = true;
-                finalGroundHeight = groundElevation;
+                finalTile = billboardCache.get(cacheKey);
               }
+
+              const scale = this.billboard_scales[tile] || 1.0;
+
+              this.tempObjects[this.objectCount++] = {
+                type: "billboard",
+                x: worldX,
+                y: worldY,
+                tile: finalTile,
+                dist: distSq,
+                proj,
+                scale: scale,
+              };
             }
           }
-          
-          if (!groundIsRamp && groundElevation > 0 && groundTile !== 0) {
-            this.tempObjects[this.objectCount++] = {
-              type: 'block',
-              x: worldX,
-              y: 0.0,
-              z: worldY,
-              tile: groundTile,
-              dist: distSq,
-              customHeight: groundElevation
-            };
-            const blockHeight = this.isBlock(groundTile) ? (this.tile_heights[groundTile] || 0.0) : 0.0;
-            finalGroundHeight = groundElevation + blockHeight;
-          }
-          
-          const proj = this.projectToScreenWithHeight(worldX, worldY, finalGroundHeight, camera);
-          if (proj.size < BILLBOARD_MINIM_SIZE) continue;
-
-          if (proj.visible) {
-            let finalTile = tile;
-            if (this.isRotatableBillboard(tile)) {
-              const cacheKey = `${tile}_${Math.floor(camera.angle * 100)}`;
-              if (!billboardCache.has(cacheKey)) {
-                billboardCache.set(cacheKey, this.getRotatedBillboardSprite(tile, camera.angle, worldX, worldY, null));
-              }
-              finalTile = billboardCache.get(cacheKey);
-            }
-            
-            const scale = this.billboard_scales[tile] || 1.0;
-            
-            this.tempObjects[this.objectCount++] = {
-              type: 'billboard',
-              x: worldX,
-              y: worldY,
-              tile: finalTile,
-              dist: distSq,
-              proj,
-              scale: scale
-            };
-          }
-        } 
-        // Procesar bloques
-        else if (this.isBlock(tile)) {
-          if (this.RAMP_ENABLED && heightMapValue > 0) {
-            const rampInfo = this.getRampType(mapX, mapY, heightMapValue);
-
-            if (rampInfo.type !== this.RAMP_TYPES.NONE) {
-              const neighbors = this.getNeighborHeights(mapX, mapY);
-
-              const baseHeight = Math.min(
-                neighbors.north,
-                neighbors.east,
-                neighbors.south,
-                neighbors.west
-              );
-
-              const targetHeight = heightMapValue;
-
-              if (targetHeight - baseHeight === 1) {
-                if (baseHeight > 0) {
-                  this.tempObjects[this.objectCount++] = {
-                    type: 'block',
-                    x: worldX,
-                    y: 0.0,
-                    z: worldY,
-                    tile,
-                    dist: distSq,
-                    customHeight: baseHeight
-                  };
-                }
-
-                this.tempObjects[this.objectCount++] = {
-                  type: 'ramp',
-                  x: worldX,
-                  y: baseHeight,
-                  z: worldY,
-                  tile,
-                  dist: distSq,
-                  rampInfo,
-                  baseHeight,
-                  targetHeight
-                };
-
-                continue;
-              }
-            }
-          }
-          
-          const customHeight = (heightMapValue > 0) ? heightMapValue : null;
-          this.tempObjects[this.objectCount++] = {
-            type: 'block',
-            x: worldX,
-            y: 0.0,
-            z: worldY,
-            tile,
-            dist: distSq,
-            customHeight: customHeight
-          };
-        } 
-        // Procesar tiles de suelo
-        else {
-          if (heightMapValue > 0) {
-            if (this.RAMP_ENABLED) {
+          // Procesar bloques
+          else if (this.isBlock(tile)) {
+            if (this.RAMP_ENABLED && heightMapValue > 0) {
               const rampInfo = this.getRampType(mapX, mapY, heightMapValue);
 
               if (rampInfo.type !== this.RAMP_TYPES.NONE) {
@@ -1536,18 +1688,18 @@ collectRenderableObjects(camera, independentObjects = []) {
                 if (targetHeight - baseHeight === 1) {
                   if (baseHeight > 0) {
                     this.tempObjects[this.objectCount++] = {
-                      type: 'block',
+                      type: "block",
                       x: worldX,
                       y: 0.0,
                       z: worldY,
                       tile,
                       dist: distSq,
-                      customHeight: baseHeight
+                      customHeight: baseHeight,
                     };
                   }
 
                   this.tempObjects[this.objectCount++] = {
-                    type: 'ramp',
+                    type: "ramp",
                     x: worldX,
                     y: baseHeight,
                     z: worldY,
@@ -1555,179 +1707,323 @@ collectRenderableObjects(camera, independentObjects = []) {
                     dist: distSq,
                     rampInfo,
                     baseHeight,
-                    targetHeight
+                    targetHeight,
                   };
 
                   continue;
                 }
               }
             }
-            
+
+            const customHeight = heightMapValue > 0 ? heightMapValue : null;
             this.tempObjects[this.objectCount++] = {
-              type: 'block',
+              type: "block",
               x: worldX,
               y: 0.0,
               z: worldY,
-              tile: tile,
+              tile,
               dist: distSq,
-              customHeight: heightMapValue
+              customHeight: customHeight,
             };
           }
-        }
-      }
-    }
-  }
+          // Procesar tiles de suelo
+          else {
+            if (heightMapValue > 0) {
+              if (this.RAMP_ENABLED) {
+                const rampInfo = this.getRampType(mapX, mapY, heightMapValue);
 
-  // Objetos independientes
-  for (const obj of independentObjects) {
-    const worldX = obj.x;
-    const worldY = obj.y;
-    const height = obj.z;
-    
-    const dx = worldX - camX;
-    const dy = worldY - camY;
-    const distSq = dx * dx + dy * dy;
-    
-    if (distSq > maxDistSq) continue;
-    
-    const rotY = dx * this.cachedSinA + dy * this.cachedCosA;
-    if (rotY < 0.1) continue;
-    
-    const rotX = dx * this.cachedCosA - dy * this.cachedSinA;
-    const screenX = 0.5 + rotX / rotY;
-    if (screenX < -this.FRUSTUM_MARGIN || screenX > (1.0 + this.FRUSTUM_MARGIN)) continue;
-    
-    if (this.isBillboard(obj.tile)) {
-      const proj = this.projectToScreenWithHeight(worldX, worldY, height, camera);
-      if (proj.size < BILLBOARD_MINIM_SIZE) continue;
+                if (rampInfo.type !== this.RAMP_TYPES.NONE) {
+                  const neighbors = this.getNeighborHeights(mapX, mapY);
 
-      if (proj.visible) {
-        let finalTile = obj.tile;
-        if (this.isRotatableBillboard(obj.tile)) {
-          const fixedAngle = obj.orientation !== undefined ? obj.orientation : null;
-          
-          if (fixedAngle === null) {
-            const cacheKey = `${obj.tile}_${Math.floor(camera.angle * 100)}`;
-            if (!billboardCache.has(cacheKey)) {
-              billboardCache.set(cacheKey, this.getRotatedBillboardSprite(obj.tile, camera.angle, worldX, worldY, null));
+                  const baseHeight = Math.min(
+                    neighbors.north,
+                    neighbors.east,
+                    neighbors.south,
+                    neighbors.west
+                  );
+
+                  const targetHeight = heightMapValue;
+
+                  if (targetHeight - baseHeight === 1) {
+                    if (baseHeight > 0) {
+                      this.tempObjects[this.objectCount++] = {
+                        type: "block",
+                        x: worldX,
+                        y: 0.0,
+                        z: worldY,
+                        tile,
+                        dist: distSq,
+                        customHeight: baseHeight,
+                      };
+                    }
+
+                    this.tempObjects[this.objectCount++] = {
+                      type: "ramp",
+                      x: worldX,
+                      y: baseHeight,
+                      z: worldY,
+                      tile,
+                      dist: distSq,
+                      rampInfo,
+                      baseHeight,
+                      targetHeight,
+                    };
+
+                    continue;
+                  }
+                }
+              }
+
+              this.tempObjects[this.objectCount++] = {
+                type: "block",
+                x: worldX,
+                y: 0.0,
+                z: worldY,
+                tile: tile,
+                dist: distSq,
+                customHeight: heightMapValue,
+              };
             }
-            finalTile = billboardCache.get(cacheKey);
-          } else {
-            finalTile = this.getRotatedBillboardSprite(obj.tile, camera.angle, worldX, worldY, fixedAngle);
           }
         }
-        
-        const scale = obj.scale !== undefined ? obj.scale : (this.billboard_scales[obj.tile] || 1.0);
-        
+      }
+    }
+
+    // Objetos independientes
+    for (const obj of independentObjects) {
+      const worldX = obj.x;
+      const worldY = obj.y;
+      const height = obj.z;
+
+      const dx = worldX - camX;
+      const dy = worldY - camY;
+      const distSq = dx * dx + dy * dy;
+
+      if (distSq > maxDistSq) continue;
+
+      const rotY = dx * this.cachedSinA + dy * this.cachedCosA;
+      if (rotY < 0.1) continue;
+
+      const rotX = dx * this.cachedCosA - dy * this.cachedSinA;
+      const screenX = 0.5 + rotX / rotY;
+      if (screenX < -this.FRUSTUM_MARGIN || screenX > 1.0 + this.FRUSTUM_MARGIN)
+        continue;
+
+      if (this.isBillboard(obj.tile)) {
+        const proj = this.projectToScreenWithHeight(
+          worldX,
+          worldY,
+          height,
+          camera
+        );
+        if (proj.size < BILLBOARD_MINIM_SIZE) continue;
+
+        if (proj.visible) {
+          let finalTile = obj.tile;
+          if (this.isRotatableBillboard(obj.tile)) {
+            const fixedAngle =
+              obj.orientation !== undefined ? obj.orientation : null;
+
+            if (fixedAngle === null) {
+              const cacheKey = `${obj.tile}_${Math.floor(camera.angle * 100)}`;
+              if (!billboardCache.has(cacheKey)) {
+                billboardCache.set(
+                  cacheKey,
+                  this.getRotatedBillboardSprite(
+                    obj.tile,
+                    camera.angle,
+                    worldX,
+                    worldY,
+                    null
+                  )
+                );
+              }
+              finalTile = billboardCache.get(cacheKey);
+            } else {
+              finalTile = this.getRotatedBillboardSprite(
+                obj.tile,
+                camera.angle,
+                worldX,
+                worldY,
+                fixedAngle
+              );
+            }
+          }
+
+          const scale =
+            obj.scale !== undefined
+              ? obj.scale
+              : this.billboard_scales[obj.tile] || 1.0;
+
+          this.tempObjects[this.objectCount++] = {
+            type: "billboard",
+            x: worldX,
+            y: worldY,
+            tile: finalTile,
+            dist: distSq,
+            proj,
+            scale: scale,
+          };
+        }
+      } else if (this.isBlock(obj.tile)) {
         this.tempObjects[this.objectCount++] = {
-          type: 'billboard',
+          type: "block",
           x: worldX,
-          y: worldY,
-          tile: finalTile,
+          y: height,
+          z: worldY,
+          tile: obj.tile,
           dist: distSq,
-          proj,
-          scale: scale
+        };
+      } else if (obj.type === "model3d") {
+        this.tempObjects[this.objectCount++] = {
+          type: "model3d",
+          modelName: obj.modelName,
+          x: worldX,
+          y: height,
+          z: worldY,
+          tile: obj.tile,
+          scale: obj.scale || 1.0,
+          rotation: obj.rotation || { x: 0, y: 0, z: 0 },
+          dist: distSq,
         };
       }
-    } else if (this.isBlock(obj.tile)) {
-      this.tempObjects[this.objectCount++] = {
-        type: 'block',
-        x: worldX,
-        y: height,
-        z: worldY,
-        tile: obj.tile,
-        dist: distSq
-      };
-    } else if (obj.type === 'model3d') {
-      this.tempObjects[this.objectCount++] = {
-        type: 'model3d',
-        modelName: obj.modelName,
-        x: worldX,
-        y: height,
-        z: worldY,
-        tile: obj.tile,
-        scale: obj.scale || 1.0,
-        rotation: obj.rotation || { x: 0, y: 0, z: 0 },
-        dist: distSq
-      };
     }
-  }
-  
-  const objects = this.tempObjects.slice(0, this.objectCount);
-  objects.sort((a, b) => b.dist - a.dist);
-  return objects;
-}
 
-drawModel3DInstanced(modelName, instances, camera) {
-  if (!instances || instances.length === 0) return;
-  
-  const model = this.models3D.get(modelName);
-  if (!model) return;
-  
-  // ✅ Usar shader de modelos
-  this.gl.useProgram(this.modelProgram);
-  
-  // Configurar geometría del modelo
-  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, model.buffer);
-  
-  this.gl.enableVertexAttribArray(this.attribLocations.model.position);
-  this.gl.vertexAttribPointer(this.attribLocations.model.position, 3, this.gl.FLOAT, false, 32, 0);
-  
-  this.gl.enableVertexAttribArray(this.attribLocations.model.texCoord);
-  this.gl.vertexAttribPointer(this.attribLocations.model.texCoord, 2, this.gl.FLOAT, false, 32, 12);
-  
-  this.gl.enableVertexAttribArray(this.attribLocations.model.normal);
-  this.gl.vertexAttribPointer(this.attribLocations.model.normal, 3, this.gl.FLOAT, false, 32, 20);
-  
-  // Uniforms comunes
-  this.gl.uniform4f(this.uniformLocations.model.camera, camera.x, camera.y, camera.z, camera.angle);
-  this.gl.uniform2f(this.uniformLocations.model.resolution, this.canvas.width, this.canvas.height);
-  this.gl.uniform1i(this.uniformLocations.model.spriteIndex, instances[0].tile);
-  this.gl.uniform1f(this.uniformLocations.model.spriteCount, this.tile_items_size);
-  
-  // Iluminación
-  this.gl.uniform1i(this.uniformLocations.model.illumination, this.ILLUMINATION);
-  this.gl.uniform1f(this.uniformLocations.model.ambient, this.AMBIENT_LIGHT);
-  this.gl.uniform1f(this.uniformLocations.model.diffuse, this.LIGHT_DIFFUSE);
-  
-  const len = Math.sqrt(
-    this.lightDir[0] * this.lightDir[0] + 
-    this.lightDir[1] * this.lightDir[1] + 
-    this.lightDir[2] * this.lightDir[2]
-  );
-  this.gl.uniform3f(this.uniformLocations.model.lightDir, 
-    this.lightDir[0]/len, this.lightDir[1]/len, this.lightDir[2]/len);
-  
-  // Textura
-  this.gl.activeTexture(this.gl.TEXTURE0);
-  this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
-  this.gl.uniform1i(this.uniformLocations.model.spritesheet, 0);
-  
-  // Niebla
-  this.gl.uniform1i(this.uniformLocations.model.fogEnabled, this.FOG_ENABLED);
-  this.gl.uniform1f(this.uniformLocations.model.fogStart, this.FOG_START);
-  this.gl.uniform1f(this.uniformLocations.model.fogEnd, this.FOG_END);
-  this.gl.uniform3f(this.uniformLocations.model.fogColor, 
-    this.FOG_COLOR[0], this.FOG_COLOR[1], this.FOG_COLOR[2]);
-  
-  // ✅ Dibujar cada instancia con su transformación única
-  for (let i = 0; i < instances.length; i++) {
-    const inst = instances[i];
-    const rotation = inst.rotation || { x: 0, y: 0, z: 0 };
-    
-    this.gl.uniform3f(this.uniformLocations.model.modelPos, inst.x, inst.y, inst.z);
-    this.gl.uniform1f(this.uniformLocations.model.modelScale, inst.scale || 1.0);
-    this.gl.uniform3f(this.uniformLocations.model.modelRotation, rotation.x, rotation.y, rotation.z);
-    
-    this.gl.drawArrays(this.gl.TRIANGLES, 0, model.vertexCount);
+    const objects = this.tempObjects.slice(0, this.objectCount);
+    objects.sort((a, b) => b.dist - a.dist);
+    return objects;
   }
-  
-  // Limpiar
-  this.gl.disableVertexAttribArray(this.attribLocations.model.position);
-  this.gl.disableVertexAttribArray(this.attribLocations.model.texCoord);
-  this.gl.disableVertexAttribArray(this.attribLocations.model.normal);
-}
 
+  drawModel3DInstanced(modelName, instances, camera) {
+    if (!instances || instances.length === 0) return;
+
+    const model = this.models3D.get(modelName);
+    if (!model) return;
+
+    // ✅ Usar shader de modelos
+    this.gl.useProgram(this.modelProgram);
+
+    // Configurar geometría del modelo
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, model.buffer);
+
+    this.gl.enableVertexAttribArray(this.attribLocations.model.position);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.model.position,
+      3,
+      this.gl.FLOAT,
+      false,
+      32,
+      0
+    );
+
+    this.gl.enableVertexAttribArray(this.attribLocations.model.texCoord);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.model.texCoord,
+      2,
+      this.gl.FLOAT,
+      false,
+      32,
+      12
+    );
+
+    this.gl.enableVertexAttribArray(this.attribLocations.model.normal);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.model.normal,
+      3,
+      this.gl.FLOAT,
+      false,
+      32,
+      20
+    );
+
+    // Uniforms comunes
+    this.gl.uniform4f(
+      this.uniformLocations.model.camera,
+      camera.x,
+      camera.y,
+      camera.z,
+      camera.angle
+    );
+    this.gl.uniform2f(
+      this.uniformLocations.model.resolution,
+      this.canvas.width,
+      this.canvas.height
+    );
+    this.gl.uniform1i(
+      this.uniformLocations.model.spriteIndex,
+      instances[0].tile
+    );
+    this.gl.uniform1f(
+      this.uniformLocations.model.spriteCount,
+      this.tile_items_size
+    );
+
+    // Iluminación
+    this.gl.uniform1i(
+      this.uniformLocations.model.illumination,
+      this.ILLUMINATION
+    );
+    this.gl.uniform1f(this.uniformLocations.model.ambient, this.AMBIENT_LIGHT);
+    this.gl.uniform1f(this.uniformLocations.model.diffuse, this.LIGHT_DIFFUSE);
+
+    const len = Math.sqrt(
+      this.lightDir[0] * this.lightDir[0] +
+        this.lightDir[1] * this.lightDir[1] +
+        this.lightDir[2] * this.lightDir[2]
+    );
+    this.gl.uniform3f(
+      this.uniformLocations.model.lightDir,
+      this.lightDir[0] / len,
+      this.lightDir[1] / len,
+      this.lightDir[2] / len
+    );
+
+    // Textura
+    this.gl.activeTexture(this.gl.TEXTURE0);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
+    this.gl.uniform1i(this.uniformLocations.model.spritesheet, 0);
+
+    // Niebla
+    this.gl.uniform1i(this.uniformLocations.model.fogEnabled, this.FOG_ENABLED);
+    this.gl.uniform1f(this.uniformLocations.model.fogStart, this.FOG_START);
+    this.gl.uniform1f(this.uniformLocations.model.fogEnd, this.FOG_END);
+    this.gl.uniform3f(
+      this.uniformLocations.model.fogColor,
+      this.FOG_COLOR[0],
+      this.FOG_COLOR[1],
+      this.FOG_COLOR[2]
+    );
+
+    // ✅ Dibujar cada instancia con su transformación única
+    for (let i = 0; i < instances.length; i++) {
+      const inst = instances[i];
+      const rotation = inst.rotation || { x: 0, y: 0, z: 0 };
+
+      this.gl.uniform3f(
+        this.uniformLocations.model.modelPos,
+        inst.x,
+        inst.y,
+        inst.z
+      );
+      this.gl.uniform1f(
+        this.uniformLocations.model.modelScale,
+        inst.scale || 1.0
+      );
+      this.gl.uniform3f(
+        this.uniformLocations.model.modelRotation,
+        rotation.x,
+        rotation.y,
+        rotation.z
+      );
+
+      this.gl.drawArrays(this.gl.TRIANGLES, 0, model.vertexCount);
+    }
+
+    // Limpiar
+    this.gl.disableVertexAttribArray(this.attribLocations.model.position);
+    this.gl.disableVertexAttribArray(this.attribLocations.model.texCoord);
+    this.gl.disableVertexAttribArray(this.attribLocations.model.normal);
+  }
 
   // Renderizar cielo
   renderSky() {
@@ -1736,329 +2032,522 @@ drawModel3DInstanced(modelName, instances, camera) {
     this.gl.useProgram(this.skyProgram);
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.skyBuffer);
     this.gl.enableVertexAttribArray(this.attribLocations.sky.position);
-    this.gl.vertexAttribPointer(this.attribLocations.sky.position, 2, this.gl.FLOAT, false, 0, 0);
-    this.gl.uniform3f(this.uniformLocations.sky.color1, this.color1[0], this.color1[1], this.color1[2]);
-    this.gl.uniform3f(this.uniformLocations.sky.color2, this.color2[0], this.color2[1], this.color2[2]);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.sky.position,
+      2,
+      this.gl.FLOAT,
+      false,
+      0,
+      0
+    );
+    this.gl.uniform3f(
+      this.uniformLocations.sky.color1,
+      this.color1[0],
+      this.color1[1],
+      this.color1[2]
+    );
+    this.gl.uniform3f(
+      this.uniformLocations.sky.color2,
+      this.color2[0],
+      this.color2[1],
+      this.color2[2]
+    );
     this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
   }
   renderSkydome(camera) {
-  if (!this.SKYDOME_ENABLED || !this.skydomeTexture) return;
-  
-  this.gl.disable(this.gl.DEPTH_TEST);
-  this.gl.disable(this.gl.BLEND);
-  this.gl.enable(this.gl.BLEND);
-  this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
+    if (!this.SKYDOME_ENABLED || !this.skydomeTexture) return;
 
-  
-  this.gl.useProgram(this.skydomeProgram);
-  
-  // Matrices
-  const viewMatrix = this.createViewMatrix(camera);
-  const projMatrix = this.createProjectionMatrix();
-  
-  this.gl.uniformMatrix4fv(this.uniformLocations.skydome.viewMatrix, false, viewMatrix);
-  this.gl.uniformMatrix4fv(this.uniformLocations.skydome.projMatrix, false, projMatrix);
-  
-  // Textura
-  this.gl.activeTexture(this.gl.TEXTURE0);
-  this.gl.bindTexture(this.gl.TEXTURE_2D, this.skydomeTexture);
-  this.gl.uniform1i(this.uniformLocations.skydome.skydomeTexture, 0);
-  
-  // Geometría
-  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.skydomeBuffer);
-  this.gl.enableVertexAttribArray(this.attribLocations.skydome.position);
-  this.gl.vertexAttribPointer(this.attribLocations.skydome.position, 3, this.gl.FLOAT, false, 0, 0);
-  
-  this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.skydomeIndexBuffer);
-  this.gl.drawElements(this.gl.TRIANGLES, this.skydomeVertexCount, this.gl.UNSIGNED_SHORT, 0);
-}
-createViewMatrix(camera) {
-  const mat = new Float32Array(16);
-  const cosA = Math.cos(camera.angle);
-  const sinA = Math.sin(camera.angle);
-  
-  // Rotación Y + Traslación (la cámara está en el centro del skydome)
-  mat[0] = cosA; mat[1] = 0; mat[2] = sinA; mat[3] = 0;
-  mat[4] = 0; mat[5] = 1; mat[6] = 0; mat[7] = 0;
-  mat[8] = -sinA; mat[9] = 0; mat[10] = cosA; mat[11] = 0;
-  mat[12] = 0; mat[13] = -camera.z; mat[14] = 0; mat[15] = 1;
-  
-  return mat;
-}
+    this.gl.disable(this.gl.DEPTH_TEST);
+    this.gl.disable(this.gl.BLEND);
+    this.gl.enable(this.gl.BLEND);
+    this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
 
-createProjectionMatrix() {
-  const mat = new Float32Array(16);
-  const fov = 60 * Math.PI / 180;
-  const aspect = this.canvas.width / this.canvas.height;
-  const near = 0.1;
-  const far = this.SKYDOME_RADIUS * 2;
-  
-  const f = 1.0 / Math.tan(fov / 2);
-  mat[0] = f / aspect;
-  mat[5] = f;
-  mat[10] = (far + near) / (near - far);
-  mat[11] = -1;
-  mat[14] = (2 * far * near) / (near - far);
-  
-  return mat;
-}
+    this.gl.useProgram(this.skydomeProgram);
 
-  
+    // Matrices
+    const viewMatrix = this.createViewMatrix(camera);
+    const projMatrix = this.createProjectionMatrix();
+
+    this.gl.uniformMatrix4fv(
+      this.uniformLocations.skydome.viewMatrix,
+      false,
+      viewMatrix
+    );
+    this.gl.uniformMatrix4fv(
+      this.uniformLocations.skydome.projMatrix,
+      false,
+      projMatrix
+    );
+
+    // Textura
+    this.gl.activeTexture(this.gl.TEXTURE0);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.skydomeTexture);
+    this.gl.uniform1i(this.uniformLocations.skydome.skydomeTexture, 0);
+
+    // Geometría
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.skydomeBuffer);
+    this.gl.enableVertexAttribArray(this.attribLocations.skydome.position);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.skydome.position,
+      3,
+      this.gl.FLOAT,
+      false,
+      0,
+      0
+    );
+
+    this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.skydomeIndexBuffer);
+    this.gl.drawElements(
+      this.gl.TRIANGLES,
+      this.skydomeVertexCount,
+      this.gl.UNSIGNED_SHORT,
+      0
+    );
+  }
+  createViewMatrix(camera) {
+    const mat = new Float32Array(16);
+    const cosA = Math.cos(camera.angle);
+    const sinA = Math.sin(camera.angle);
+
+    // Rotación Y + Traslación (la cámara está en el centro del skydome)
+    mat[0] = cosA;
+    mat[1] = 0;
+    mat[2] = sinA;
+    mat[3] = 0;
+    mat[4] = 0;
+    mat[5] = 1;
+    mat[6] = 0;
+    mat[7] = 0;
+    mat[8] = -sinA;
+    mat[9] = 0;
+    mat[10] = cosA;
+    mat[11] = 0;
+    mat[12] = 0;
+    mat[13] = -camera.z;
+    mat[14] = 0;
+    mat[15] = 1;
+
+    return mat;
+  }
+
+  createProjectionMatrix() {
+    const mat = new Float32Array(16);
+    const fov = (60 * Math.PI) / 180;
+    const aspect = this.canvas.width / this.canvas.height;
+    const near = 0.1;
+    const far = this.SKYDOME_RADIUS * 2;
+
+    const f = 1.0 / Math.tan(fov / 2);
+    mat[0] = f / aspect;
+    mat[5] = f;
+    mat[10] = (far + near) / (near - far);
+    mat[11] = -1;
+    mat[14] = (2 * far * near) / (near - far);
+
+    return mat;
+  }
+
   // Renderizar suelo
-renderGround(camera) {
-  this.gl.disable(this.gl.DEPTH_TEST);
-  this.gl.enable(this.gl.BLEND);
-  //this.gl.disable(this.gl.BLEND);
+  renderGround(camera) {
+    this.gl.disable(this.gl.DEPTH_TEST);
+    this.gl.enable(this.gl.BLEND);
+    //this.gl.disable(this.gl.BLEND);
 
-  this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
-  
-  this.gl.useProgram(this.program);
-  this.gl.enableVertexAttribArray(this.attribLocations.ground.position);
-  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
-  this.gl.vertexAttribPointer(this.attribLocations.ground.position, 2, this.gl.FLOAT, false, 0, 0);
-  this.gl.uniform1f(this.uniformLocations.ground.spriteCount, this.tile_items_size);
-  this.gl.uniform4f(this.uniformLocations.ground.camera, camera.x, camera.y, camera.z, camera.angle);
-  
-  this.gl.activeTexture(this.gl.TEXTURE0);
-  this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
-  this.gl.uniform1i(this.uniformLocations.ground.spritesheet, 0);
-  
-  this.gl.activeTexture(this.gl.TEXTURE1);
-  this.gl.bindTexture(this.gl.TEXTURE_2D, this.tileMapTexture);
-  this.gl.uniform1i(this.uniformLocations.ground.tileMapTexture, 1);
+    this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
 
-  // Niebla
-  this.gl.uniform1i(this.uniformLocations.ground.fogEnabled, this.FOG_ENABLED);
-  this.gl.uniform1f(this.uniformLocations.ground.fogStart, this.FOG_START);
-  this.gl.uniform1f(this.uniformLocations.ground.fogEnd, this.FOG_END);
-  this.gl.uniform3f(this.uniformLocations.ground.fogColor, 
-    this.FOG_COLOR[0], this.FOG_COLOR[1], this.FOG_COLOR[2]);
+    this.gl.useProgram(this.program);
+    this.gl.enableVertexAttribArray(this.attribLocations.ground.position);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.positionBuffer);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.ground.position,
+      2,
+      this.gl.FLOAT,
+      false,
+      0,
+      0
+    );
+    this.gl.uniform1f(
+      this.uniformLocations.ground.spriteCount,
+      this.tile_items_size
+    );
+    this.gl.uniform4f(
+      this.uniformLocations.ground.camera,
+      camera.x,
+      camera.y,
+      camera.z,
+      camera.angle
+    );
 
-  // ═══════════════════════════════════════
-  // TIEMPO PARA ANIMACIÓN DE AGUA
-  // ═══════════════════════════════════════
-  this.gl.uniform1f(this.uniformLocations.ground.time, this.time);
-  
-  this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
-}
+    this.gl.activeTexture(this.gl.TEXTURE0);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
+    this.gl.uniform1i(this.uniformLocations.ground.spritesheet, 0);
 
-// nuevo metodo billboards
+    this.gl.activeTexture(this.gl.TEXTURE1);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.tileMapTexture);
+    this.gl.uniform1i(this.uniformLocations.ground.tileMapTexture, 1);
 
+    // Niebla
+    this.gl.uniform1i(
+      this.uniformLocations.ground.fogEnabled,
+      this.FOG_ENABLED
+    );
+    this.gl.uniform1f(this.uniformLocations.ground.fogStart, this.FOG_START);
+    this.gl.uniform1f(this.uniformLocations.ground.fogEnd, this.FOG_END);
+    this.gl.uniform3f(
+      this.uniformLocations.ground.fogColor,
+      this.FOG_COLOR[0],
+      this.FOG_COLOR[1],
+      this.FOG_COLOR[2]
+    );
 
-drawBillboardsInstanced(tileType, instances) {
-  if (!instances || instances.length === 0) return;
+    // ═══════════════════════════════════════
+    // TIEMPO PARA ANIMACIÓN DE AGUA
+    // ═══════════════════════════════════════
+    this.gl.uniform1f(this.uniformLocations.ground.time, this.time);
 
-  this.gl.useProgram(this.billboardProgram);
-  
-  // ✅ OPTIMIZACIÓN 1: Reutilizar buffer si es lo suficientemente grande
-  const requiredSize = instances.length * 16; // 4 floats * 4 bytes
-  if (!this.billboardInstanceData || this.billboardInstanceData.byteLength < requiredSize) {
-    this.billboardInstanceData = new Float32Array(instances.length * 4);
+    this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
   }
-  
-  // ✅ OPTIMIZACIÓN 2: Llenar datos sin crear nuevo array cada frame
-  for (let i = 0; i < instances.length; i++) {
-    const offset = i * 4;
-    this.billboardInstanceData[offset + 0] = instances[i].proj.x;
-    this.billboardInstanceData[offset + 1] = instances[i].proj.y;
-    this.billboardInstanceData[offset + 2] = instances[i].proj.size;
-    this.billboardInstanceData[offset + 3] = instances[i].scale || 1.0;
-  }
+
+  // nuevo metodo billboards
+
+  drawBillboardsInstanced(tileType, instances) {
+    if (!instances || instances.length === 0) return;
+
+    this.gl.useProgram(this.billboardProgram);
+
+    // ✅ OPTIMIZACIÓN 1: Reutilizar buffer si es lo suficientemente grande
+    const requiredSize = instances.length * 16; // 4 floats * 4 bytes
+    if (
+      !this.billboardInstanceData ||
+      this.billboardInstanceData.byteLength < requiredSize
+    ) {
+      this.billboardInstanceData = new Float32Array(instances.length * 4);
+    }
+
+    // ✅ OPTIMIZACIÓN 2: Llenar datos sin crear nuevo array cada frame
+    for (let i = 0; i < instances.length; i++) {
+      const offset = i * 4;
+      this.billboardInstanceData[offset + 0] = instances[i].proj.x;
+      this.billboardInstanceData[offset + 1] = instances[i].proj.y;
+      this.billboardInstanceData[offset + 2] = instances[i].proj.size;
+      this.billboardInstanceData[offset + 3] = instances[i].scale || 1.0;
+    }
     this.gl.depthMask(false);
     this.gl.disable(this.gl.BLEND);
 
-  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.billboardInstanceBuffer);
-  // ✅ OPTIMIZACIÓN 3: Usar STREAM_DRAW para datos que cambian cada frame
-  this.gl.bufferData(this.gl.ARRAY_BUFFER, this.billboardInstanceData, this.gl.STREAM_DRAW);
-  
-  // Configurar geometría base (esto puede moverse a initBuffers para hacerlo solo una vez)
-  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.billboardBuffer);
-  this.gl.enableVertexAttribArray(this.attribLocations.billboard.offset);
-  this.gl.vertexAttribPointer(this.attribLocations.billboard.offset, 2, this.gl.FLOAT, false, 0, 0);
-  
-  // Configurar atributos de instancia
-  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.billboardInstanceBuffer);
-  this.gl.enableVertexAttribArray(this.attribLocations.billboard.instanceData);
-  this.gl.vertexAttribPointer(this.attribLocations.billboard.instanceData, 4, this.gl.FLOAT, false, 16, 0);
-  this.gl.vertexAttribDivisor(this.attribLocations.billboard.instanceData, 1);
-  
-  // ✅ OPTIMIZACIÓN 4: Configurar uniforms una sola vez
-  this.gl.uniform1i(this.uniformLocations.billboard.spriteIndex, tileType);
-  this.gl.uniform1f(this.uniformLocations.billboard.spriteCount, this.tile_items_size);
-  this.gl.uniform1i(this.uniformLocations.billboard.fogEnabled, this.FOG_ENABLED);
-  this.gl.uniform1f(this.uniformLocations.billboard.fogStart, this.FOG_START);
-  this.gl.uniform1f(this.uniformLocations.billboard.fogEnd, this.FOG_END);
-  this.gl.uniform3f(this.uniformLocations.billboard.fogColor, 
-    this.FOG_COLOR[0], this.FOG_COLOR[1], this.FOG_COLOR[2]);
-  
-  this.gl.activeTexture(this.gl.TEXTURE0);
-  this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
-  this.gl.uniform1i(this.uniformLocations.billboard.spritesheet, 0);
-  
-  // ✅ OPTIMIZACIÓN 5: Configurar depth/blend solo una vez al inicio del render pass
-  this.gl.depthFunc(this.gl.LEQUAL);
-  this.gl.polygonOffset(-1.0, -1.0);
-  this.gl.enable(this.gl.POLYGON_OFFSET_FILL);
-  
-  // Dibujar todas las instancias de una vez
-  this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, 6, instances.length);
-  
-  this.gl.disable(this.gl.POLYGON_OFFSET_FILL);
-  this.gl.vertexAttribDivisor(this.attribLocations.billboard.instanceData, 0);
-}
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.billboardInstanceBuffer);
+    // ✅ OPTIMIZACIÓN 3: Usar STREAM_DRAW para datos que cambian cada frame
+    this.gl.bufferData(
+      this.gl.ARRAY_BUFFER,
+      this.billboardInstanceData,
+      this.gl.STREAM_DRAW
+    );
 
-
-  
-  // Renderizar billboard
-  drawBillboard(billboard) {
-    this.gl.useProgram(this.billboardProgram);
-    
+    // Configurar geometría base (esto puede moverse a initBuffers para hacerlo solo una vez)
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.billboardBuffer);
     this.gl.enableVertexAttribArray(this.attribLocations.billboard.offset);
-    this.gl.vertexAttribPointer(this.attribLocations.billboard.offset, 2, this.gl.FLOAT, false, 0, 0);
-    
-    this.gl.uniform2f(this.uniformLocations.billboard.screenPos, billboard.proj.x, billboard.proj.y);
-    this.gl.uniform1f(this.uniformLocations.billboard.size, billboard.proj.size);
-   this.gl.uniform1f(this.uniformLocations.billboard.scale, billboard.scale || 1.0);
-    this.gl.uniform1i(this.uniformLocations.billboard.spriteIndex, billboard.tile);
-    this.gl.uniform1f(this.uniformLocations.billboard.spriteCount, this.tile_items_size);
-    //niebla
-      // Calcular distancia del billboard
-    const dx = billboard.x - this.lastCamera.x;
-    const dy = billboard.y - this.lastCamera.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    // Añadir uniforms de niebla
-    this.gl.uniform1i(this.uniformLocations.billboard.fogEnabled, this.FOG_ENABLED);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.billboard.offset,
+      2,
+      this.gl.FLOAT,
+      false,
+      0,
+      0
+    );
+
+    // Configurar atributos de instancia
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.billboardInstanceBuffer);
+    this.gl.enableVertexAttribArray(
+      this.attribLocations.billboard.instanceData
+    );
+    this.gl.vertexAttribPointer(
+      this.attribLocations.billboard.instanceData,
+      4,
+      this.gl.FLOAT,
+      false,
+      16,
+      0
+    );
+    this.gl.vertexAttribDivisor(this.attribLocations.billboard.instanceData, 1);
+
+    // ✅ OPTIMIZACIÓN 4: Configurar uniforms una sola vez
+    this.gl.uniform1i(this.uniformLocations.billboard.spriteIndex, tileType);
+    this.gl.uniform1f(
+      this.uniformLocations.billboard.spriteCount,
+      this.tile_items_size
+    );
+    this.gl.uniform1i(
+      this.uniformLocations.billboard.fogEnabled,
+      this.FOG_ENABLED
+    );
     this.gl.uniform1f(this.uniformLocations.billboard.fogStart, this.FOG_START);
     this.gl.uniform1f(this.uniformLocations.billboard.fogEnd, this.FOG_END);
-    this.gl.uniform3f(this.uniformLocations.billboard.fogColor, 
-      this.FOG_COLOR[0], this.FOG_COLOR[1], this.FOG_COLOR[2]);
-    this.gl.uniform1f(this.uniformLocations.billboard.distance, distance);
-
-
+    this.gl.uniform3f(
+      this.uniformLocations.billboard.fogColor,
+      this.FOG_COLOR[0],
+      this.FOG_COLOR[1],
+      this.FOG_COLOR[2]
+    );
 
     this.gl.activeTexture(this.gl.TEXTURE0);
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
     this.gl.uniform1i(this.uniformLocations.billboard.spritesheet, 0);
-    
+
+    // ✅ OPTIMIZACIÓN 5: Configurar depth/blend solo una vez al inicio del render pass
     this.gl.depthFunc(this.gl.LEQUAL);
     this.gl.polygonOffset(-1.0, -1.0);
     this.gl.enable(this.gl.POLYGON_OFFSET_FILL);
-    
+
+    // Dibujar todas las instancias de una vez
+    this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, 6, instances.length);
+
+    this.gl.disable(this.gl.POLYGON_OFFSET_FILL);
+    this.gl.vertexAttribDivisor(this.attribLocations.billboard.instanceData, 0);
+  }
+
+  // Renderizar billboard
+  drawBillboard(billboard) {
+    this.gl.useProgram(this.billboardProgram);
+
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.billboardBuffer);
+    this.gl.enableVertexAttribArray(this.attribLocations.billboard.offset);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.billboard.offset,
+      2,
+      this.gl.FLOAT,
+      false,
+      0,
+      0
+    );
+
+    this.gl.uniform2f(
+      this.uniformLocations.billboard.screenPos,
+      billboard.proj.x,
+      billboard.proj.y
+    );
+    this.gl.uniform1f(
+      this.uniformLocations.billboard.size,
+      billboard.proj.size
+    );
+    this.gl.uniform1f(
+      this.uniformLocations.billboard.scale,
+      billboard.scale || 1.0
+    );
+    this.gl.uniform1i(
+      this.uniformLocations.billboard.spriteIndex,
+      billboard.tile
+    );
+    this.gl.uniform1f(
+      this.uniformLocations.billboard.spriteCount,
+      this.tile_items_size
+    );
+    //niebla
+    // Calcular distancia del billboard
+    const dx = billboard.x - this.lastCamera.x;
+    const dy = billboard.y - this.lastCamera.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // Añadir uniforms de niebla
+    this.gl.uniform1i(
+      this.uniformLocations.billboard.fogEnabled,
+      this.FOG_ENABLED
+    );
+    this.gl.uniform1f(this.uniformLocations.billboard.fogStart, this.FOG_START);
+    this.gl.uniform1f(this.uniformLocations.billboard.fogEnd, this.FOG_END);
+    this.gl.uniform3f(
+      this.uniformLocations.billboard.fogColor,
+      this.FOG_COLOR[0],
+      this.FOG_COLOR[1],
+      this.FOG_COLOR[2]
+    );
+    this.gl.uniform1f(this.uniformLocations.billboard.distance, distance);
+
+    this.gl.activeTexture(this.gl.TEXTURE0);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
+    this.gl.uniform1i(this.uniformLocations.billboard.spritesheet, 0);
+
+    this.gl.depthFunc(this.gl.LEQUAL);
+    this.gl.polygonOffset(-1.0, -1.0);
+    this.gl.enable(this.gl.POLYGON_OFFSET_FILL);
+
     this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
-    
+
     this.gl.disable(this.gl.POLYGON_OFFSET_FILL);
   }
-  
-  // Renderizar bloques instanciados
-// Renderizar bloques instanciados
-drawBlocksInstanced(tileType, instances, camera) {
-  if (!instances || instances.length === 0) return;
-  
-  this.gl.useProgram(this.blockProgram);
-  
-  // Usar altura por defecto del tile
-  const defaultHeight = this.tile_heights[tileType] || 1.0;
-  
-  const instanceData = new Float32Array(instances.length * 4);
-  for (let i = 0; i < instances.length; i++) {
-    // Usar customHeight individual de cada instancia, o el valor por defecto
-    const height = instances[i].customHeight !== undefined && instances[i].customHeight !== null 
-      ? instances[i].customHeight 
-      : defaultHeight;
-    
-    instanceData[i * 4 + 0] = instances[i].x;
-    instanceData[i * 4 + 1] = instances[i].y;
-    instanceData[i * 4 + 2] = instances[i].z;
-    instanceData[i * 4 + 3] = height;
-  }
-  
-  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.instanceBuffer);
-  this.gl.bufferData(this.gl.ARRAY_BUFFER, instanceData, this.gl.DYNAMIC_DRAW);
-  
-  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.cubeBuffer);
-  
-  this.gl.enableVertexAttribArray(this.attribLocations.block.position);
-  this.gl.vertexAttribPointer(this.attribLocations.block.position, 3, this.gl.FLOAT, false, 32, 0);
-  
-  this.gl.enableVertexAttribArray(this.attribLocations.block.texCoord);
-  this.gl.vertexAttribPointer(this.attribLocations.block.texCoord, 2, this.gl.FLOAT, false, 32, 12);
-  
-  this.gl.enableVertexAttribArray(this.attribLocations.block.normal);
-  this.gl.vertexAttribPointer(this.attribLocations.block.normal, 3, this.gl.FLOAT, false, 32, 20);
-  
-  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.instanceBuffer);
-  this.gl.enableVertexAttribArray(this.attribLocations.block.instanceData);
-  this.gl.vertexAttribPointer(this.attribLocations.block.instanceData, 4, this.gl.FLOAT, false, 16, 0);
-  this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 1);
-  
-  this.gl.uniform4f(this.uniformLocations.block.camera, camera.x, camera.y, camera.z, camera.angle);
-  this.gl.uniform2f(this.uniformLocations.block.resolution, this.canvas.width, this.canvas.height);
-  this.gl.uniform1i(this.uniformLocations.block.spriteIndex, tileType);
-  this.gl.uniform1f(this.uniformLocations.block.spriteCount, this.tile_items_size);
-  
-  this.gl.uniform1i(this.uniformLocations.block.illumination, this.ILLUMINATION);
-  this.gl.uniform1f(this.uniformLocations.block.ambient, this.AMBIENT_LIGHT);
-  this.gl.uniform1f(this.uniformLocations.block.diffuse, this.LIGHT_DIFFUSE);
-  
-  const len = Math.sqrt(this.lightDir[0]*this.lightDir[0] + this.lightDir[1]*this.lightDir[1] + this.lightDir[2]*this.lightDir[2]);
-  this.gl.uniform3f(this.uniformLocations.block.lightDir, this.lightDir[0]/len, this.lightDir[1]/len, this.lightDir[2]/len);
-  
-  this.gl.activeTexture(this.gl.TEXTURE0);
-  this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
-  this.gl.uniform1i(this.uniformLocations.block.spritesheet, 0);
-  
-  // Añadir uniforms de niebla antes del drawArraysInstanced:
-  this.gl.uniform1i(this.uniformLocations.block.fogEnabled, this.FOG_ENABLED);
-  this.gl.uniform1f(this.uniformLocations.block.fogStart, this.FOG_START);
-  this.gl.uniform1f(this.uniformLocations.block.fogEnd, this.FOG_END);
-  this.gl.uniform3f(this.uniformLocations.block.fogColor, 
-    this.FOG_COLOR[0], this.FOG_COLOR[1], this.FOG_COLOR[2]);
-  
-  this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, 36, instances.length);
-  
-  this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 0);
-}
-  
 
- // Modificar el método render principal
+  // Renderizar bloques instanciados
+  // Renderizar bloques instanciados
+  drawBlocksInstanced(tileType, instances, camera) {
+    if (!instances || instances.length === 0) return;
+
+    this.gl.useProgram(this.blockProgram);
+
+    // Usar altura por defecto del tile
+    const defaultHeight = this.tile_heights[tileType] || 1.0;
+
+    const instanceData = new Float32Array(instances.length * 4);
+    for (let i = 0; i < instances.length; i++) {
+      // Usar customHeight individual de cada instancia, o el valor por defecto
+      const height =
+        instances[i].customHeight !== undefined &&
+        instances[i].customHeight !== null
+          ? instances[i].customHeight
+          : defaultHeight;
+
+      instanceData[i * 4 + 0] = instances[i].x;
+      instanceData[i * 4 + 1] = instances[i].y;
+      instanceData[i * 4 + 2] = instances[i].z;
+      instanceData[i * 4 + 3] = height;
+    }
+
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.instanceBuffer);
+    this.gl.bufferData(
+      this.gl.ARRAY_BUFFER,
+      instanceData,
+      this.gl.DYNAMIC_DRAW
+    );
+
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.cubeBuffer);
+
+    this.gl.enableVertexAttribArray(this.attribLocations.block.position);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.block.position,
+      3,
+      this.gl.FLOAT,
+      false,
+      32,
+      0
+    );
+
+    this.gl.enableVertexAttribArray(this.attribLocations.block.texCoord);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.block.texCoord,
+      2,
+      this.gl.FLOAT,
+      false,
+      32,
+      12
+    );
+
+    this.gl.enableVertexAttribArray(this.attribLocations.block.normal);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.block.normal,
+      3,
+      this.gl.FLOAT,
+      false,
+      32,
+      20
+    );
+
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.instanceBuffer);
+    this.gl.enableVertexAttribArray(this.attribLocations.block.instanceData);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.block.instanceData,
+      4,
+      this.gl.FLOAT,
+      false,
+      16,
+      0
+    );
+    this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 1);
+
+    this.gl.uniform4f(
+      this.uniformLocations.block.camera,
+      camera.x,
+      camera.y,
+      camera.z,
+      camera.angle
+    );
+    this.gl.uniform2f(
+      this.uniformLocations.block.resolution,
+      this.canvas.width,
+      this.canvas.height
+    );
+    this.gl.uniform1i(this.uniformLocations.block.spriteIndex, tileType);
+    this.gl.uniform1f(
+      this.uniformLocations.block.spriteCount,
+      this.tile_items_size
+    );
+
+    this.gl.uniform1i(
+      this.uniformLocations.block.illumination,
+      this.ILLUMINATION
+    );
+    this.gl.uniform1f(this.uniformLocations.block.ambient, this.AMBIENT_LIGHT);
+    this.gl.uniform1f(this.uniformLocations.block.diffuse, this.LIGHT_DIFFUSE);
+
+    const len = Math.sqrt(
+      this.lightDir[0] * this.lightDir[0] +
+        this.lightDir[1] * this.lightDir[1] +
+        this.lightDir[2] * this.lightDir[2]
+    );
+    this.gl.uniform3f(
+      this.uniformLocations.block.lightDir,
+      this.lightDir[0] / len,
+      this.lightDir[1] / len,
+      this.lightDir[2] / len
+    );
+
+    this.gl.activeTexture(this.gl.TEXTURE0);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
+    this.gl.uniform1i(this.uniformLocations.block.spritesheet, 0);
+
+    // Añadir uniforms de niebla antes del drawArraysInstanced:
+    this.gl.uniform1i(this.uniformLocations.block.fogEnabled, this.FOG_ENABLED);
+    this.gl.uniform1f(this.uniformLocations.block.fogStart, this.FOG_START);
+    this.gl.uniform1f(this.uniformLocations.block.fogEnd, this.FOG_END);
+    this.gl.uniform3f(
+      this.uniformLocations.block.fogColor,
+      this.FOG_COLOR[0],
+      this.FOG_COLOR[1],
+      this.FOG_COLOR[2]
+    );
+
+    this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, 36, instances.length);
+
+    this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 0);
+  }
+
+  // Modificar el método render principal
   render(independentObjects = [], renderSky = true) {
     this.time += 0.016;
     let camera = this.camera;
     this.lastCamera = camera;
     this.updateTrigCache(camera);
-    
+
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    
+
     if (renderSky) this.renderSky();
     if (this.SKYDOME_ENABLED) this.renderSkydome(camera);
-    
+
     this.renderGround(camera);
     this.gl.clear(this.gl.DEPTH_BUFFER_BIT);
-    
-    const allObjects = this.collectRenderableObjects(camera, independentObjects);
-    
+
+    const allObjects = this.collectRenderableObjects(
+      camera,
+      independentObjects
+    );
+
     this.gl.enable(this.gl.DEPTH_TEST);
     this.gl.depthFunc(this.gl.LEQUAL);
     this.gl.depthMask(true);
     this.gl.disable(this.gl.BLEND);
-    
+
     // Agrupar objetos por tipo
     let currentBlockTile = null;
     let blockBatch = [];
     let currentModelName = null;
     let modelBatch = [];
-    
+
     for (const obj of allObjects) {
-      if (obj.type === 'block') {
+      if (obj.type === "block") {
         // Dibujar modelos 3D pendientes
         if (modelBatch.length > 0) {
           this.drawModel3DInstanced(currentModelName, modelBatch, camera);
           modelBatch = [];
           currentModelName = null;
         }
-        
+
         // Agrupar bloques
         if (currentBlockTile === obj.tile) {
           blockBatch.push(obj);
@@ -2069,15 +2558,14 @@ drawBlocksInstanced(tileType, instances, camera) {
           currentBlockTile = obj.tile;
           blockBatch = [obj];
         }
-      }
-      else if (obj.type === 'model3d') {
+      } else if (obj.type === "model3d") {
         // Dibujar bloques pendientes
         if (blockBatch.length > 0) {
           this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
           blockBatch = [];
           currentBlockTile = null;
         }
-        
+
         // Agrupar modelos 3D
         if (currentModelName === obj.modelName) {
           modelBatch.push(obj);
@@ -2088,8 +2576,7 @@ drawBlocksInstanced(tileType, instances, camera) {
           currentModelName = obj.modelName;
           modelBatch = [obj];
         }
-      }
-      else if (obj.type === 'billboard') {
+      } else if (obj.type === "billboard") {
         // Dibujar pendientes
         if (blockBatch.length > 0) {
           this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
@@ -2101,31 +2588,33 @@ drawBlocksInstanced(tileType, instances, camera) {
           modelBatch = [];
           currentModelName = null;
         }
-        
+
         this.gl.enable(this.gl.BLEND);
         this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
         this.gl.depthMask(false);
-        
+
         const billboardBatch = [obj];
         let nextIndex = allObjects.indexOf(obj) + 1;
-        
+
         while (nextIndex < allObjects.length) {
           const nextObj = allObjects[nextIndex];
-          if (nextObj.type === 'billboard' && nextObj.tile === obj.tile) {
+          if (nextObj.type === "billboard" && nextObj.tile === obj.tile) {
             billboardBatch.push(nextObj);
             nextIndex++;
           } else {
             break;
           }
         }
-        
+
         this.drawBillboardsInstanced(obj.tile, billboardBatch);
-        allObjects.splice(allObjects.indexOf(obj) + 1, billboardBatch.length - 1);
-        
+        allObjects.splice(
+          allObjects.indexOf(obj) + 1,
+          billboardBatch.length - 1
+        );
+
         this.gl.depthMask(true);
         this.gl.disable(this.gl.BLEND);
-      }
-      else if (obj.type === 'ramp') {
+      } else if (obj.type === "ramp") {
         if (blockBatch.length > 0) {
           this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
           blockBatch = [];
@@ -2139,7 +2628,7 @@ drawBlocksInstanced(tileType, instances, camera) {
         this.drawRamp(obj, camera);
       }
     }
-    
+
     // Dibujar últimos batches
     if (blockBatch.length > 0) {
       this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
@@ -2147,46 +2636,43 @@ drawBlocksInstanced(tileType, instances, camera) {
     if (modelBatch.length > 0) {
       this.drawModel3DInstanced(currentModelName, modelBatch, camera);
     }
-    
+
     this.gl.disable(this.gl.DEPTH_TEST);
     this.gl.enable(this.gl.BLEND);
   }
-
-
-
 
   // Métodos de utilidad
   toggleIllumination() {
     this.ILLUMINATION = !this.ILLUMINATION;
     return this.ILLUMINATION;
   }
-  
+
   setIllumination(value) {
     this.ILLUMINATION = value;
   }
-  
+
   setAmbientLight(value) {
     this.AMBIENT_LIGHT = value;
   }
-  
+
   setLightDiffuse(value) {
     this.LIGHT_DIFFUSE = value;
   }
-  
+
   setLightDirection(x, y, z) {
     this.lightDir = [x, y, z];
   }
-  
+
   setSkyColors(color1, color2) {
     this.color1 = color1;
     this.color2 = color2;
   }
-  
+
   resize(width, height) {
     this.canvas.width = width * this.RENDER_SCALE;
     this.canvas.height = height * this.RENDER_SCALE;
-    this.canvas.style.width = width + 'px';
-    this.canvas.style.height = height + 'px';
+    this.canvas.style.width = width + "px";
+    this.canvas.style.height = height + "px";
   }
 
   enableSkydome(enabled) {
@@ -2198,27 +2684,27 @@ drawBlocksInstanced(tileType, instances, camera) {
     this.createSkydomeGeometry();
   }
 
-    toggleFog() {
+  toggleFog() {
     this.FOG_ENABLED = !this.FOG_ENABLED;
     return this.FOG_ENABLED;
   }
-  
+
   setFogEnabled(value) {
     this.FOG_ENABLED = value;
   }
-  
+
   setFogStart(value) {
     this.FOG_START = value;
   }
-  
+
   setFogEnd(value) {
     this.FOG_END = value;
   }
-  
+
   setFogColor(r, g, b) {
     this.FOG_COLOR = [r, g, b];
   }
-  
+
   setFogRange(start, end) {
     this.FOG_START = start;
     this.FOG_END = end;
@@ -2226,143 +2712,132 @@ drawBlocksInstanced(tileType, instances, camera) {
 
   //funciones auxiliares
 
-  transformNumber(n){
+  transformNumber(n) {
     return Number(n).toFixed(1);
   }
   //rampas :
-getRampType(x, y, currentHeight) {
-  const neighbors = this.getNeighborHeights(x, y);
-  const heightDiffs = {
-    north: neighbors.north - currentHeight,
-    east: neighbors.east - currentHeight,
-    south: neighbors.south - currentHeight,
-    west: neighbors.west - currentHeight
-  };
-  
-  const highSides = [];
-  const lowSides = [];
-  
-  Object.keys(heightDiffs).forEach(dir => {
-    if (heightDiffs[dir] === 1) highSides.push(dir);
-    if (heightDiffs[dir] === -1) lowSides.push(dir);
-  });
-  
-  if (highSides.length + lowSides.length === 0) return { type: this.RAMP_TYPES.NONE };
-  
-  // RAMPA ASCENDENTE: 1 lado alto
-  if (highSides.length === 1 && lowSides.length === 0) {
-    return { 
-      type: this.RAMP_TYPES.STRAIGHT, 
-      direction: highSides[0],
-      ascending: true 
+  getRampType(x, y, currentHeight) {
+    const neighbors = this.getNeighborHeights(x, y);
+    const heightDiffs = {
+      north: neighbors.north - currentHeight,
+      east: neighbors.east - currentHeight,
+      south: neighbors.south - currentHeight,
+      west: neighbors.west - currentHeight,
     };
-  }
-  
-  // RAMPA DESCENDENTE: 1 lado bajo (NUEVA - solo para rampas rectas)
-  if (lowSides.length === 1 && highSides.length === 0) {
-    return { 
-      type: this.RAMP_TYPES.STRAIGHT, 
-      direction: lowSides[0],
-      ascending: false  // ← Esta es descendente
-    };
-  }
-  
-  // ESQUINA EXTERIOR: 2 lados altos adyacentes
-  if (highSides.length === 2 && lowSides.length === 0) {
-    const adjacent = this.areAdjacent(highSides[0], highSides[1]);
-    if (adjacent) {
-      return { 
-        type: this.RAMP_TYPES.OUTER_CORNER, 
-        corner: this.getCornerName(highSides),
-        ascending: true 
+
+    const highSides = [];
+    const lowSides = [];
+
+    Object.keys(heightDiffs).forEach((dir) => {
+      if (heightDiffs[dir] === 1) highSides.push(dir);
+      if (heightDiffs[dir] === -1) lowSides.push(dir);
+    });
+
+    if (highSides.length + lowSides.length === 0)
+      return { type: this.RAMP_TYPES.NONE };
+
+    // RAMPA ASCENDENTE: 1 lado alto
+    if (highSides.length === 1 && lowSides.length === 0) {
+      return {
+        type: this.RAMP_TYPES.STRAIGHT,
+        direction: highSides[0],
+        ascending: true,
       };
     }
-  }
-  
-  // ESQUINA INTERIOR: 2 lados bajos adyacentes  
-  if (lowSides.length === 2 && highSides.length === 0) {
-    const adjacent = this.areAdjacent(lowSides[0], lowSides[1]);
-    if (adjacent) {
-      return { 
-        type: this.RAMP_TYPES.INNER_CORNER, 
-        corner: this.getCornerName(lowSides),
-        ascending: false 
+
+    // RAMPA DESCENDENTE: 1 lado bajo (NUEVA - solo para rampas rectas)
+    if (lowSides.length === 1 && highSides.length === 0) {
+      return {
+        type: this.RAMP_TYPES.STRAIGHT,
+        direction: lowSides[0],
+        ascending: false, // ← Esta es descendente
       };
     }
-  }
-  
-  return { type: this.RAMP_TYPES.NONE };
-}
 
-
-getNeighborHeights(x, y) {
-  const getHeight = (nx, ny) => {
-    if (nx < 0 || ny < 0 || nx >= this.MAP_WIDTH || ny >= this.MAP_HEIGHT) {
-      return 0;
+    // ESQUINA EXTERIOR: 2 lados altos adyacentes
+    if (highSides.length === 2 && lowSides.length === 0) {
+      const adjacent = this.areAdjacent(highSides[0], highSides[1]);
+      if (adjacent) {
+        return {
+          type: this.RAMP_TYPES.OUTER_CORNER,
+          corner: this.getCornerName(highSides),
+          ascending: true,
+        };
+      }
     }
-    const idx = ny * this.MAP_WIDTH + nx;
-    return this.heightMap ? (this.heightMap[idx] || 0) : 0;
-  };
-  
-  return {
-    north: getHeight(x, y - 1),
-    east: getHeight(x + 1, y),
-    south: getHeight(x, y + 1),
-    west: getHeight(x - 1, y)
-  };
-}
 
-areAdjacent(dir1, dir2) {
-  const adjacentPairs = [
-    ['north', 'east'], ['east', 'south'], 
-    ['south', 'west'], ['west', 'north']
-  ];
-  
-  return adjacentPairs.some(pair => 
-    (pair[0] === dir1 && pair[1] === dir2) || 
-    (pair[1] === dir1 && pair[0] === dir2)
-  );
-}
+    // ESQUINA INTERIOR: 2 lados bajos adyacentes
+    if (lowSides.length === 2 && highSides.length === 0) {
+      const adjacent = this.areAdjacent(lowSides[0], lowSides[1]);
+      if (adjacent) {
+        return {
+          type: this.RAMP_TYPES.INNER_CORNER,
+          corner: this.getCornerName(lowSides),
+          ascending: false,
+        };
+      }
+    }
 
-getCornerName(dirs) {
-  const set = new Set(dirs);
-  
-  // La esquina está donde se JUNTAN los dos lados, no en el lado opuesto
-  
-  // Si tenemos north + east → esquina en northeast (donde se juntan)
-  if (set.has('north') && set.has('east')) return 'northeast';
-  
-  // Si tenemos south + east → esquina en southeast (donde se juntan)
-  if (set.has('south') && set.has('east')) return 'southeast';
-  
-  // Si tenemos south + west → esquina en southwest (donde se juntan)
-  if (set.has('south') && set.has('west')) return 'southwest';
-  
-  // Si tenemos north + west → esquina en northwest (donde se juntan)
-  if (set.has('north') && set.has('west')) return 'northwest';
-  
-  return 'northeast'; // Fallback
-}
-
-// ============================================
-// 3. GEOMETRÍA DE RAMPAS
-// ============================================
-
-getRampVertices(rampInfo) {
-  // Retorna vértices personalizados según el tipo de rampa
-  const { type, direction, corner, ascending } = rampInfo;
-  
-  if (type === this.RAMP_TYPES.STRAIGHT) {
-    return this.getStraightRampVertices(direction, ascending);
-  } else if (type === this.RAMP_TYPES.INNER_CORNER) {
-    return this.getInnerCornerRampVertices(corner, ascending);
-  } else if (type === this.RAMP_TYPES.OUTER_CORNER) {
-    return this.getOuterCornerRampVertices(corner, ascending);
+    return { type: this.RAMP_TYPES.NONE };
   }
-  
-  return null;
-}
 
+  getNeighborHeights(x, y) {
+    const getHeight = (nx, ny) => {
+      if (nx < 0 || ny < 0 || nx >= this.MAP_WIDTH || ny >= this.MAP_HEIGHT) {
+        return 0;
+      }
+      const idx = ny * this.MAP_WIDTH + nx;
+      return this.heightMap ? this.heightMap[idx] || 0 : 0;
+    };
+
+    return {
+      north: getHeight(x, y - 1),
+      east: getHeight(x + 1, y),
+      south: getHeight(x, y + 1),
+      west: getHeight(x - 1, y),
+    };
+  }
+
+  areAdjacent(dir1, dir2) {
+    const adjacentPairs = [
+      ["north", "east"],
+      ["east", "south"],
+      ["south", "west"],
+      ["west", "north"],
+    ];
+
+    return adjacentPairs.some(
+      (pair) =>
+        (pair[0] === dir1 && pair[1] === dir2) ||
+        (pair[1] === dir1 && pair[0] === dir2)
+    );
+  }
+
+  getCornerName(dirs) {
+    const set = new Set(dirs);
+
+    // La esquina está donde se JUNTAN los dos lados, no en el lado opuesto
+
+    // Si tenemos north + east → esquina en northeast (donde se juntan)
+    if (set.has("north") && set.has("east")) return "northeast";
+
+    // Si tenemos south + east → esquina en southeast (donde se juntan)
+    if (set.has("south") && set.has("east")) return "southeast";
+
+    // Si tenemos south + west → esquina en southwest (donde se juntan)
+    if (set.has("south") && set.has("west")) return "southwest";
+
+    // Si tenemos north + west → esquina en northwest (donde se juntan)
+    if (set.has("north") && set.has("west")) return "northwest";
+
+    return "northeast"; // Fallback
+  }
+
+  // ============================================
+  // 3. GEOMETRÍA DE RAMPAS
+  // ============================================
+
+  
 getStraightRampVertices(direction, ascending) {
   // Rampa recta: rampa sube en la dirección especificada
   // north = sube hacia Y-, east = sube hacia X+, south = sube hacia Y+, west = sube hacia X-
@@ -2528,241 +3003,335 @@ const rotations = {
 
 
 getOuterCornerRampVertices(corner, ascending) {
-  // Esquina exterior: rampa convexa (pirámide invertida)
-  // El vértice bajo está en la esquina especificada
-  //TODO
-  const rotations = {
-    northeast: 180,   // ← Cambiar de 90
-    southeast: 270,   // ← Cambiar de 90
-    southwest: 0,     // ← Cambiar de 90
-    northwest: 90     // ← Mantener
-  };
-  
-  const angle = (rotations[corner] || 0) * Math.PI / 180;
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-  
-  const rotate = (x, z) => ({
-    x: x * cos - z * sin,
-    z: x * sin + z * cos
-  });
-  
-  // Base: esquina exterior con vértice bajo en (+0.5, -0.5, 0.0)
-  const verts = [];
-  const normalNE = { x: 0.577, y: 0.577, z: -0.577 };
-  const normalNW = { x: -0.577, y: 0.577, z: -0.577 };
-  
-  // Cara inclinada norte (Z-) - triángulo
-  verts.push(
-    -0.5, 1.0, -0.5,  0, 1,  0, 0.7071, -0.7071,
-     0.5, 0.0, -0.5,  1, 0,  0, 0.7071, -0.7071,
-     0.5, 1.0, -0.5,  1, 1,  0, 0.7071, -0.7071
-  );
-  
-  // Cara inclinada este (X+) - triángulo
-  verts.push(
-     0.5, 1.0, -0.5,  1, 1,  0.7071, 0.7071, 0,
-     0.5, 0.0, -0.5,  1, 0,  0.7071, 0.7071, 0,
-     0.5, 1.0,  0.5,  0, 1,  0.7071, 0.7071, 0
-  );
-  
-  // Cara inclinada diagonal - triángulo
-  verts.push(
-     0.5, 0.0, -0.5,  1, 0,  normalNE.x, normalNE.y, normalNE.z,
-    -0.5, 1.0, -0.5,  0, 1,  normalNE.x, normalNE.y, normalNE.z,
-     0.5, 1.0,  0.5,  1, 1,  normalNE.x, normalNE.y, normalNE.z
-  );
-  
-  // Cara vertical sur (Z+)
-  verts.push(
-    -0.5, 1.0, -0.5,  0, 1,  0, 0, 1,
-    -0.5, 1.0,  0.5,  0, 1,  0, 0, 1,
-     0.5, 1.0,  0.5,  1, 1,  0, 0, 1
-  );
-  
-  // Cara vertical oeste (X-)
-  verts.push(
-    -0.5, 1.0,  0.5,  1, 1,  -1, 0, 0,
-    -0.5, 1.0, -0.5,  0, 1,  -1, 0, 0,
-    -0.5, 0.0, -0.5,  0, 0,  -1, 0, 0
-  );
-  
-  // Cara superior (techo plano)
-  verts.push(
-    -0.5, 1.0, -0.5,  0, 0,  0, 1, 0,
-     0.5, 1.0,  0.5,  1, 1,  0, 1, 0,
-    -0.5, 1.0,  0.5,  0, 1,  0, 1, 0,
+    // Esquina exterior: rampa convexa (pirámide invertida)
+    // El vértice bajo está en la esquina especificada
+    //TODO
+    const rotations = {
+      northeast: 180,   // ← Cambiar de 90
+      southeast: 270,   // ← Cambiar de 90
+      southwest: 0,     // ← Cambiar de 90
+      northwest: 90     // ← Mantener
+    };
     
-    -0.5, 1.0, -0.5,  0, 0,  0, 1, 0,
-     0.5, 1.0, -0.5,  1, 0,  0, 1, 0,
-     0.5, 1.0,  0.5,  1, 1,  0, 1, 0
-  );
-  
-  // Cara inferior
-  verts.push(
-    -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
-     0.5, 0.0, -0.5,  1, 0,  0, -1, 0,
-     0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
+    const angle = (rotations[corner] || 0) * Math.PI / 180;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
     
-    -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
-     0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
-    -0.5, 0.0,  0.5,  0, 1,  0, -1, 0
-  );
-  
-  // Rotar según esquina
-  const rotated = [];
-  for (let i = 0; i < verts.length; i += 8) {
-    const pos = rotate(verts[i], verts[i + 2]);
-    rotated.push(
-      pos.x, verts[i + 1], pos.z,
-      verts[i + 3], verts[i + 4],
-      verts[i + 5], verts[i + 6], verts[i + 7]
+    const rotate = (x, z) => ({
+      x: x * cos - z * sin,
+      z: x * sin + z * cos
+    });
+    
+    // Base: esquina exterior con vértice bajo en (+0.5, -0.5, 0.0)
+    const verts = [];
+    const normalNE = { x: 0.577, y: 0.577, z: -0.577 };
+    const normalNW = { x: -0.577, y: 0.577, z: -0.577 };
+    
+    // Cara inclinada norte (Z-) - triángulo
+    verts.push(
+      -0.5, 1.0, -0.5,  0, 1,  0, 0.7071, -0.7071,
+      0.5, 0.0, -0.5,  1, 0,  0, 0.7071, -0.7071,
+      0.5, 1.0, -0.5,  1, 1,  0, 0.7071, -0.7071
     );
+    
+    // Cara inclinada este (X+) - triángulo
+    verts.push(
+      0.5, 1.0, -0.5,  1, 1,  0.7071, 0.7071, 0,
+      0.5, 0.0, -0.5,  1, 0,  0.7071, 0.7071, 0,
+      0.5, 1.0,  0.5,  0, 1,  0.7071, 0.7071, 0
+    );
+    
+    // Cara inclinada diagonal - triángulo
+    verts.push(
+      0.5, 0.0, -0.5,  1, 0,  normalNE.x, normalNE.y, normalNE.z,
+      -0.5, 1.0, -0.5,  0, 1,  normalNE.x, normalNE.y, normalNE.z,
+      0.5, 1.0,  0.5,  1, 1,  normalNE.x, normalNE.y, normalNE.z
+    );
+    
+    // Cara vertical sur (Z+)
+    verts.push(
+      -0.5, 1.0, -0.5,  0, 1,  0, 0, 1,
+      -0.5, 1.0,  0.5,  0, 1,  0, 0, 1,
+      0.5, 1.0,  0.5,  1, 1,  0, 0, 1
+    );
+    
+    // Cara vertical oeste (X-)
+    verts.push(
+      -0.5, 1.0,  0.5,  1, 1,  -1, 0, 0,
+      -0.5, 1.0, -0.5,  0, 1,  -1, 0, 0,
+      -0.5, 0.0, -0.5,  0, 0,  -1, 0, 0
+    );
+    
+    // Cara superior (techo plano)
+    verts.push(
+      -0.5, 1.0, -0.5,  0, 0,  0, 1, 0,
+      0.5, 1.0,  0.5,  1, 1,  0, 1, 0,
+      -0.5, 1.0,  0.5,  0, 1,  0, 1, 0,
+      
+      -0.5, 1.0, -0.5,  0, 0,  0, 1, 0,
+      0.5, 1.0, -0.5,  1, 0,  0, 1, 0,
+      0.5, 1.0,  0.5,  1, 1,  0, 1, 0
+    );
+    
+    // Cara inferior
+    verts.push(
+      -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
+      0.5, 0.0, -0.5,  1, 0,  0, -1, 0,
+      0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
+      
+      -0.5, 0.0, -0.5,  0, 0,  0, -1, 0,
+      0.5, 0.0,  0.5,  1, 1,  0, -1, 0,
+      -0.5, 0.0,  0.5,  0, 1,  0, -1, 0
+    );
+    
+    // Rotar según esquina
+    const rotated = [];
+    for (let i = 0; i < verts.length; i += 8) {
+      const pos = rotate(verts[i], verts[i + 2]);
+      rotated.push(
+        pos.x, verts[i + 1], pos.z,
+        verts[i + 3], verts[i + 4],
+        verts[i + 5], verts[i + 6], verts[i + 7]
+      );
+    }
+    
+    return new Float32Array(rotated);
   }
-  
-  return new Float32Array(rotated);
-}
 
-drawRamp(ramp, camera) {
-  // Crear geometría específica para esta rampa
-  const rampVertices = this.getRampVertices(ramp.rampInfo);
-  if (!rampVertices) return;
-  
-  this.gl.useProgram(this.blockProgram);
+  getRampVertices(rampInfo) {
+    // Retorna vértices personalizados según el tipo de rampa
+    const { type, direction, corner, ascending } = rampInfo;
+
+    if (type === this.RAMP_TYPES.STRAIGHT) {
+      return this.getStraightRampVertices(direction, ascending);
+    } else if (type === this.RAMP_TYPES.INNER_CORNER) {
+      return this.getInnerCornerRampVertices(corner, ascending);
+    } else if (type === this.RAMP_TYPES.OUTER_CORNER) {
+      return this.getOuterCornerRampVertices(corner, ascending);
+    }
+
+    return null;
+  }
+
+  drawRamp(ramp, camera) {
+    // Crear geometría específica para esta rampa
+    const rampVertices = this.getRampVertices(ramp.rampInfo);
+    if (!rampVertices) return;
+
+    this.gl.useProgram(this.blockProgram);
     this.gl.disable(this.gl.CULL_FACE);
 
-  
-  // Buffer temporal para esta rampa - IMPORTANTE: vincular ANTES de configurar atributos
-  const tempBuffer = this.gl.createBuffer();
-  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, tempBuffer);
-  this.gl.bufferData(this.gl.ARRAY_BUFFER, rampVertices, this.gl.DYNAMIC_DRAW);
-  
-  // Configurar atributos con el buffer temporal ya vinculado
-  // Stride = 32 bytes (3 floats pos + 2 floats UV + 3 floats normal = 8 floats * 4 bytes)
-  this.gl.enableVertexAttribArray(this.attribLocations.block.position);
-  this.gl.vertexAttribPointer(this.attribLocations.block.position, 3, this.gl.FLOAT, false, 32, 0);
-  
-  this.gl.enableVertexAttribArray(this.attribLocations.block.texCoord);
-  this.gl.vertexAttribPointer(this.attribLocations.block.texCoord, 2, this.gl.FLOAT, false, 32, 12);
-  
-  this.gl.enableVertexAttribArray(this.attribLocations.block.normal);
-  this.gl.vertexAttribPointer(this.attribLocations.block.normal, 3, this.gl.FLOAT, false, 32, 20);
-  
-  // Resetear divisor para estos atributos (no son instanciados)
-  this.gl.vertexAttribDivisor(this.attribLocations.block.position, 0);
-  this.gl.vertexAttribDivisor(this.attribLocations.block.texCoord, 0);
-  this.gl.vertexAttribDivisor(this.attribLocations.block.normal, 0);
-  
-  // Ahora configurar el instance buffer
-  //const height = ramp.targetHeight - ramp.baseHeight;
-const instanceData = new Float32Array([
-  ramp.x, ramp.y, ramp.z, ramp.targetHeight - ramp.baseHeight
-]);
-  
-  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.instanceBuffer);
-  this.gl.bufferData(this.gl.ARRAY_BUFFER, instanceData, this.gl.DYNAMIC_DRAW);
-  
-  this.gl.enableVertexAttribArray(this.attribLocations.block.instanceData);
-  this.gl.vertexAttribPointer(this.attribLocations.block.instanceData, 4, this.gl.FLOAT, false, 16, 0);
-  this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 1);
-  
-  // Uniforms
-  this.gl.uniform4f(this.uniformLocations.block.camera, camera.x, camera.y, camera.z, camera.angle);
-  this.gl.uniform2f(this.uniformLocations.block.resolution, this.canvas.width, this.canvas.height);
-  this.gl.uniform1i(this.uniformLocations.block.spriteIndex, ramp.tile);
-  this.gl.uniform1f(this.uniformLocations.block.spriteCount, this.tile_items_size);
-  
-  // Iluminación y niebla
-  this.gl.uniform1i(this.uniformLocations.block.illumination, this.ILLUMINATION);
-  this.gl.uniform1f(this.uniformLocations.block.ambient, this.AMBIENT_LIGHT);
-  this.gl.uniform1f(this.uniformLocations.block.diffuse, this.LIGHT_DIFFUSE);
-  
-  const len = Math.sqrt(this.lightDir[0]*this.lightDir[0] + this.lightDir[1]*this.lightDir[1] + this.lightDir[2]*this.lightDir[2]);
-  this.gl.uniform3f(this.uniformLocations.block.lightDir, this.lightDir[0]/len, this.lightDir[1]/len, this.lightDir[2]/len);
-  
-  this.gl.activeTexture(this.gl.TEXTURE0);
-  this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
-  this.gl.uniform1i(this.uniformLocations.block.spritesheet, 0);
-  
-  this.gl.uniform1i(this.uniformLocations.block.fogEnabled, this.FOG_ENABLED);
-  this.gl.uniform1f(this.uniformLocations.block.fogStart, this.FOG_START);
-  this.gl.uniform1f(this.uniformLocations.block.fogEnd, this.FOG_END);
-  this.gl.uniform3f(this.uniformLocations.block.fogColor, 
-    this.FOG_COLOR[0], this.FOG_COLOR[1], this.FOG_COLOR[2]);
-  
-  // Dibujar
-  const vertexCount = rampVertices.length / 8; // 8 floats por vértice
-  this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, vertexCount, 1);
-  
-  // CRÍTICO: Limpiar TODOS los atributos y divisores
-  this.gl.disableVertexAttribArray(this.attribLocations.block.position);
-  this.gl.disableVertexAttribArray(this.attribLocations.block.texCoord);
-  this.gl.disableVertexAttribArray(this.attribLocations.block.normal);
-  this.gl.disableVertexAttribArray(this.attribLocations.block.instanceData);
-  this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 0);
-  
-  this.gl.deleteBuffer(tempBuffer);
-}
-setWaterTiles(tiles) {
-  this.water_tiles = tiles;
-  this.water_tiles_set = new Set(tiles);
-}
+    // Buffer temporal para esta rampa - IMPORTANTE: vincular ANTES de configurar atributos
+    const tempBuffer = this.gl.createBuffer();
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, tempBuffer);
+    this.gl.bufferData(
+      this.gl.ARRAY_BUFFER,
+      rampVertices,
+      this.gl.DYNAMIC_DRAW
+    );
 
-setWaterAnimation(speed, wave) {
-  this.WATER_SPEED = speed;
-  this.WATER_WAVE = wave;
-}
+    // Configurar atributos con el buffer temporal ya vinculado
+    // Stride = 32 bytes (3 floats pos + 2 floats UV + 3 floats normal = 8 floats * 4 bytes)
+    this.gl.enableVertexAttribArray(this.attribLocations.block.position);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.block.position,
+      3,
+      this.gl.FLOAT,
+      false,
+      32,
+      0
+    );
 
-isWaterTile(tile) {
-  return this.water_tiles_set.has(tile);
-}
+    this.gl.enableVertexAttribArray(this.attribLocations.block.texCoord);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.block.texCoord,
+      2,
+      this.gl.FLOAT,
+      false,
+      32,
+      12
+    );
+
+    this.gl.enableVertexAttribArray(this.attribLocations.block.normal);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.block.normal,
+      3,
+      this.gl.FLOAT,
+      false,
+      32,
+      20
+    );
+
+    // Resetear divisor para estos atributos (no son instanciados)
+    this.gl.vertexAttribDivisor(this.attribLocations.block.position, 0);
+    this.gl.vertexAttribDivisor(this.attribLocations.block.texCoord, 0);
+    this.gl.vertexAttribDivisor(this.attribLocations.block.normal, 0);
+
+    // Ahora configurar el instance buffer
+    //const height = ramp.targetHeight - ramp.baseHeight;
+    const instanceData = new Float32Array([
+      ramp.x,
+      ramp.y,
+      ramp.z,
+      ramp.targetHeight - ramp.baseHeight,
+    ]);
+
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.instanceBuffer);
+    this.gl.bufferData(
+      this.gl.ARRAY_BUFFER,
+      instanceData,
+      this.gl.DYNAMIC_DRAW
+    );
+
+    this.gl.enableVertexAttribArray(this.attribLocations.block.instanceData);
+    this.gl.vertexAttribPointer(
+      this.attribLocations.block.instanceData,
+      4,
+      this.gl.FLOAT,
+      false,
+      16,
+      0
+    );
+    this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 1);
+
+    // Uniforms
+    this.gl.uniform4f(
+      this.uniformLocations.block.camera,
+      camera.x,
+      camera.y,
+      camera.z,
+      camera.angle
+    );
+    this.gl.uniform2f(
+      this.uniformLocations.block.resolution,
+      this.canvas.width,
+      this.canvas.height
+    );
+    this.gl.uniform1i(this.uniformLocations.block.spriteIndex, ramp.tile);
+    this.gl.uniform1f(
+      this.uniformLocations.block.spriteCount,
+      this.tile_items_size
+    );
+
+    // Iluminación y niebla
+    this.gl.uniform1i(
+      this.uniformLocations.block.illumination,
+      this.ILLUMINATION
+    );
+    this.gl.uniform1f(this.uniformLocations.block.ambient, this.AMBIENT_LIGHT);
+    this.gl.uniform1f(this.uniformLocations.block.diffuse, this.LIGHT_DIFFUSE);
+
+    const len = Math.sqrt(
+      this.lightDir[0] * this.lightDir[0] +
+        this.lightDir[1] * this.lightDir[1] +
+        this.lightDir[2] * this.lightDir[2]
+    );
+    this.gl.uniform3f(
+      this.uniformLocations.block.lightDir,
+      this.lightDir[0] / len,
+      this.lightDir[1] / len,
+      this.lightDir[2] / len
+    );
+
+    this.gl.activeTexture(this.gl.TEXTURE0);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
+    this.gl.uniform1i(this.uniformLocations.block.spritesheet, 0);
+
+    this.gl.uniform1i(this.uniformLocations.block.fogEnabled, this.FOG_ENABLED);
+    this.gl.uniform1f(this.uniformLocations.block.fogStart, this.FOG_START);
+    this.gl.uniform1f(this.uniformLocations.block.fogEnd, this.FOG_END);
+    this.gl.uniform3f(
+      this.uniformLocations.block.fogColor,
+      this.FOG_COLOR[0],
+      this.FOG_COLOR[1],
+      this.FOG_COLOR[2]
+    );
+
+    // Dibujar
+    const vertexCount = rampVertices.length / 8; // 8 floats por vértice
+    this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, vertexCount, 1);
+
+    // CRÍTICO: Limpiar TODOS los atributos y divisores
+    this.gl.disableVertexAttribArray(this.attribLocations.block.position);
+    this.gl.disableVertexAttribArray(this.attribLocations.block.texCoord);
+    this.gl.disableVertexAttribArray(this.attribLocations.block.normal);
+    this.gl.disableVertexAttribArray(this.attribLocations.block.instanceData);
+    this.gl.vertexAttribDivisor(this.attribLocations.block.instanceData, 0);
+
+    this.gl.deleteBuffer(tempBuffer);
+  }
+  setWaterTiles(tiles) {
+    this.water_tiles = tiles;
+    this.water_tiles_set = new Set(tiles);
+  }
+
+  setWaterAnimation(speed, wave) {
+    this.WATER_SPEED = speed;
+    this.WATER_WAVE = wave;
+  }
+
+  isWaterTile(tile) {
+    return this.water_tiles_set.has(tile);
+  }
 
   async loadModel(name, objUrl) {
     try {
       console.log(`Cargando modelo: ${name} desde ${objUrl}`);
-      
+
       const objData = await OBJLoader.load(objUrl);
       const vertexArray = OBJLoader.toVertexArray(objData);
-      
+
       // Crear buffer WebGL
       const buffer = this.gl.createBuffer();
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, vertexArray, this.gl.STATIC_DRAW);
-      
+      this.gl.bufferData(
+        this.gl.ARRAY_BUFFER,
+        vertexArray,
+        this.gl.STATIC_DRAW
+      );
+
       const model = {
         name,
         vertexCount: vertexArray.length / 8, // 8 floats por vértice
         buffer,
-        vertexArray
+        vertexArray,
       };
-      
+
       this.models3D.set(name, model);
       this.modelBuffers.set(name, buffer);
-      
+
       console.log(`Modelo ${name} cargado: ${model.vertexCount} vértices`);
       return model;
-      
     } catch (error) {
       console.error(`Error cargando modelo ${name}:`, error);
       throw error;
     }
   }
-  
+
   // Método para crear instancias de modelos en la escena
-createModelInstance(modelName, x, y, z, options = {}) {
-  // ✅ No verificar aquí, solo crear el objeto
-  // El modelo puede no estar cargado todavía, pero eso está OK
-  
-  return {
-    type: 'model3d',
-    modelName,
-    x, y, z,
-    scale: options.scale || 1.0,
-    rotation: options.rotation || { x: 0, y: 0, z: 0 },
-    tile: options.tile || 1,
-    customHeight: options.height || null
-  };
-}
+  createModelInstance(modelName, x, y, z, options = {}) {
+    // ✅ No verificar aquí, solo crear el objeto
+    // El modelo puede no estar cargado todavía, pero eso está OK
+
+    return {
+      type: "model3d",
+      modelName,
+      x,
+      y,
+      z,
+      scale: options.scale || 1.0,
+      rotation: options.rotation || { x: 0, y: 0, z: 0 },
+      tile: options.tile || 1,
+      customHeight: options.height || null,
+    };
+  }
+
+  //metodo auxiliar para pasar de rgb a 0/1
+  normalizeColor(c) {
+    return c[0] > 1 || c[1] > 1 || c[2] > 1
+      ? [c[0] / 255, c[1] / 255, c[2] / 255]
+      : c;
+  }
 }
 //parser obj
 // Agregar a glitter7engine.js
@@ -2773,93 +3342,97 @@ class OBJLoader {
     const text = await response.text();
     return this.parse(text);
   }
-    static simplify(objData, targetReduction = 0.5) {
+  static simplify(objData, targetReduction = 0.5) {
     // targetReduction: 0.5 = reducir a 50%, 0.1 = reducir a 10%
-    
-    console.log(`Simplificando modelo: ${objData.faces.length} caras originales`);
-    
+
+    console.log(
+      `Simplificando modelo: ${objData.faces.length} caras originales`
+    );
+
     const newFaces = [];
     const step = Math.max(1, Math.floor(1 / targetReduction));
-    
+
     // Tomar 1 de cada N caras
     for (let i = 0; i < objData.faces.length; i += step) {
       newFaces.push(objData.faces[i]);
     }
-    
-    console.log(`Simplificado a: ${newFaces.length} caras (${(newFaces.length / objData.faces.length * 100).toFixed(1)}%)`);
-    
+
+    console.log(
+      `Simplificado a: ${newFaces.length} caras (${(
+        (newFaces.length / objData.faces.length) *
+        100
+      ).toFixed(1)}%)`
+    );
+
     return {
       vertices: objData.vertices,
       texCoords: objData.texCoords,
       normals: objData.normals,
-      faces: newFaces
+      faces: newFaces,
     };
   }
-  
+
   static async load(url) {
     const response = await fetch(url);
     const text = await response.text();
     return this.parse(text);
   }
-  
+
   static parse(objText) {
     const vertices = [];
     const texCoords = [];
     const normals = [];
     const faces = [];
-    
-    const lines = objText.split('\n');
-    
+
+    const lines = objText.split("\n");
+
     for (const line of lines) {
       const parts = line.trim().split(/\s+/);
       const type = parts[0];
-      
-      if (type === 'v') {
+
+      if (type === "v") {
         vertices.push(
           parseFloat(parts[1]),
           parseFloat(parts[2]),
           parseFloat(parts[3])
         );
-      }
-      else if (type === 'vt') {
-        texCoords.push(
-          parseFloat(parts[1]),
-          parseFloat(parts[2])
-        );
-      }
-      else if (type === 'vn') {
+      } else if (type === "vt") {
+        texCoords.push(parseFloat(parts[1]), parseFloat(parts[2]));
+      } else if (type === "vn") {
         normals.push(
           parseFloat(parts[1]),
           parseFloat(parts[2]),
           parseFloat(parts[3])
         );
-      }
-      else if (type === 'f') {
+      } else if (type === "f") {
         const face = [];
         for (let i = 1; i < parts.length; i++) {
-          const indices = parts[i].split('/');
+          const indices = parts[i].split("/");
           face.push({
             v: parseInt(indices[0]) - 1,
             vt: indices[1] ? parseInt(indices[1]) - 1 : null,
-            vn: indices[2] ? parseInt(indices[2]) - 1 : null
+            vn: indices[2] ? parseInt(indices[2]) - 1 : null,
           });
         }
         faces.push(face);
       }
     }
-    
+
     return { vertices, texCoords, normals, faces };
   }
-  
+
   static toVertexArray(objData) {
     const vertexData = [];
-    
+
     for (const face of objData.faces) {
-      const triangles = face.length === 3 ? [face] : [
-        [face[0], face[1], face[2]],
-        [face[0], face[2], face[3]]
-      ];
-      
+      const triangles =
+        face.length === 3
+          ? [face]
+          : [
+              [face[0], face[1], face[2]],
+              [face[0], face[2], face[3]],
+            ];
+
       for (const tri of triangles) {
         for (const vertex of tri) {
           const vIdx = vertex.v * 3;
@@ -2868,7 +3441,7 @@ class OBJLoader {
             objData.vertices[vIdx + 1],
             objData.vertices[vIdx + 2]
           );
-          
+
           if (vertex.vt !== null) {
             const vtIdx = vertex.vt * 2;
             vertexData.push(
@@ -2878,7 +3451,7 @@ class OBJLoader {
           } else {
             vertexData.push(0, 0);
           }
-          
+
           if (vertex.vn !== null) {
             const vnIdx = vertex.vn * 3;
             vertexData.push(
@@ -2892,8 +3465,7 @@ class OBJLoader {
         }
       }
     }
-    
+
     return new Float32Array(vertexData);
   }
 }
-  
