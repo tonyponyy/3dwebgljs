@@ -5,6 +5,12 @@
   <style>
     body { margin: 0; overflow: hidden; background: #333; }
     canvas { display: block; }
+    #glCanvas {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+}
+
     #controls {
       position: absolute;
       top: 10px;
@@ -134,12 +140,15 @@
       box-shadow: 0 2px 5px rgba(0,0,0,0.3);
     }
 
+
+
   </style>
 </head>
 <body>
   <!-- Controles móviles 
 <canvas id="glCanvas" width="960" height="540"></canvas>-->
 <canvas id="glCanvas" width="960" height="540"></canvas>
+<canvas id="canvasaux" width="960" height="540"></canvas>
 
 <!-- Controles móviles -->
 <div class="mobile-controls">
@@ -160,6 +169,11 @@
 
 <script>
 // ====== Control de flechas y táctil
+canvas_aux = document.getElementById('canvasaux');
+const ctx = canvas_aux.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+
 const keys = {};
 
 window.addEventListener('keydown', e => {
@@ -241,6 +255,8 @@ const MAP_HEIGHT = 200;
 <script src="collision.js"></script>
 <script src="glitter7engine.js"></script>
 <script src="camera.js"></script>
+<script src="print_text.js"></script>
+
 
 <script src="controls.js"></script>
 <script src="playermodel3d.js"></script>
@@ -303,14 +319,6 @@ const engine = new Glitter7engine(canvas, {
   
   
   },
-  cellShading: {
-  enabled: true,
-  bands: 4,  // 2-8 niveles de luz
-  contour: 2,  // píxeles de grosor, o false
-  contourColor: [0.0, 0.0, 0.0],  // color del borde
-  specular: true,  // brillo opcional
-  specularSize: 0.1
-},
 
 
 
@@ -326,7 +334,7 @@ waterWave: 0.2,    // Olas más pronunciadas
     mapHeight: 200,
   },
   tileSize: 48,
-  maxRenderDistance: 100,
+  maxRenderDistance: 900,
 heightMap: ei
 
   ,
@@ -344,15 +352,15 @@ heightMap: ei
   },
   
   skydome: {
-    enabled: false,
+    enabled: true,
     radius: 100,
     segments: 12,
     rep_h: 4,
     rep_v: 10
   },
   background:{
-    color1:[0,0.3,0.8],
-    color2:[0,0.7,0.7]
+    color1:[89,79,249],
+    color2:[89,79,249]
   },
   
   fog: {
@@ -370,7 +378,7 @@ heightMap: ei
 });
 
 // Cargar recursos
-//imageToBase64("img/img_cielo.png", (img) => engine.loadSkydomeTexture(img))
+imageToBase64("img/img_cielo.png", (img) => engine.loadSkydomeTexture(img))
 imageToBase64("img/carretera1.png", (img) => engine.loadSpritesheet(img))
  engine.loadModel('cat', 'model/cat/cat.obj');
  engine.loadModel('tree', 'model/tree/tree.obj');
@@ -406,12 +414,27 @@ const independentObjects = [
 let player = initPlayer(playerObject, tileMap, independentObjects);
 //applyMovementPreset('REALISTIC');
 
+//cargar fuente
+const font_img = new Image();
+  font_img.src = 'img/font.png';
+
+
 // Loop de render
 function gameLoop() {
-  engine.render(independentObjects, true);
+  //engine.render(independentObjects, true);
+  render();
   updatePlayer(player, keys);
   updateCamera();
+  
   requestAnimationFrame(gameLoop);
+}
+
+function render(){
+  engine.render(independentObjects, true);
+  let temp_canvas = engine.canvas // <-- este canvas es el que está con antialiasing
+  ctx.drawImage(temp_canvas, 0, 0); //<-- este ctx no tiene antialiasing pero imprime el canvas del engine con los pixeles grandes como puños
+  print_text("test", 0, 0,ctx)
+  print_title("Pruebas teeeeeeest ^^", 30, 30)
 }
 
 gameLoop();
