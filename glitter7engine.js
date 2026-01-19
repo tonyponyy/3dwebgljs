@@ -1472,6 +1472,7 @@ void main() {
                     neighbors.south,
                     neighbors.west
                   );
+                  
 
                   if (modelHeight - baseHeight === 1) {
                     // Crear bloques base (desde 0 hasta baseHeight)
@@ -2525,7 +2526,7 @@ void main() {
 
     const allObjects = this.collectRenderableObjects(
       camera,
-      independentObjects
+      independentObjects.flat(2)
     );
 
     this.gl.enable(this.gl.DEPTH_TEST);
@@ -2716,70 +2717,70 @@ void main() {
     return Number(n).toFixed(1);
   }
   //rampas :
-  getRampType(x, y, currentHeight) {
-    const neighbors = this.getNeighborHeights(x, y);
-    const heightDiffs = {
-      north: neighbors.north - currentHeight,
-      east: neighbors.east - currentHeight,
-      south: neighbors.south - currentHeight,
-      west: neighbors.west - currentHeight,
+getRampType(x, y, currentHeight) {
+  const neighbors = this.getNeighborHeights(x, y);
+  const heightDiffs = {
+    north: neighbors.north - currentHeight,
+    east: neighbors.east - currentHeight,
+    south: neighbors.south - currentHeight,
+    west: neighbors.west - currentHeight,
+  };
+
+  const highSides = [];
+  const lowSides = [];
+
+  Object.keys(heightDiffs).forEach((dir) => {
+    if (heightDiffs[dir] === 1) highSides.push(dir);
+    if (heightDiffs[dir] === -1) lowSides.push(dir);
+  });
+
+  if (highSides.length + lowSides.length === 0)
+    return { type: this.RAMP_TYPES.NONE };
+
+  // ✅ CAMBIO: Permitir lados bajos en rampas rectas (bordes)
+  if (highSides.length === 1) {  // <- Eliminar && lowSides.length === 0
+    return {
+      type: this.RAMP_TYPES.STRAIGHT,
+      direction: highSides[0],
+      ascending: true,
     };
+  }
 
-    const highSides = [];
-    const lowSides = [];
+  // Rampa descendente (sin cambios por ahora)
+  if (lowSides.length === 1 && highSides.length === 0) {
+    return {
+      type: this.RAMP_TYPES.STRAIGHT,
+      direction: lowSides[0],
+      ascending: false,
+    };
+  }
 
-    Object.keys(heightDiffs).forEach((dir) => {
-      if (heightDiffs[dir] === 1) highSides.push(dir);
-      if (heightDiffs[dir] === -1) lowSides.push(dir);
-    });
-
-    if (highSides.length + lowSides.length === 0)
-      return { type: this.RAMP_TYPES.NONE };
-
-    // RAMPA ASCENDENTE: 1 lado alto
-    if (highSides.length === 1 && lowSides.length === 0) {
+  // Esquinas exteriores - también flexibilizar
+  if (highSides.length === 2) {  // <- Eliminar && lowSides.length === 0
+    const adjacent = this.areAdjacent(highSides[0], highSides[1]);
+    if (adjacent) {
       return {
-        type: this.RAMP_TYPES.STRAIGHT,
-        direction: highSides[0],
+        type: this.RAMP_TYPES.OUTER_CORNER,
+        corner: this.getCornerName(highSides),
         ascending: true,
       };
     }
+  }
 
-    // RAMPA DESCENDENTE: 1 lado bajo (NUEVA - solo para rampas rectas)
-    if (lowSides.length === 1 && highSides.length === 0) {
+  // Esquinas interiores (mantener estricto)
+  if (lowSides.length === 2 && highSides.length === 0) {
+    const adjacent = this.areAdjacent(lowSides[0], lowSides[1]);
+    if (adjacent) {
       return {
-        type: this.RAMP_TYPES.STRAIGHT,
-        direction: lowSides[0],
-        ascending: false, // ← Esta es descendente
+        type: this.RAMP_TYPES.INNER_CORNER,
+        corner: this.getCornerName(lowSides),
+        ascending: false,
       };
     }
-
-    // ESQUINA EXTERIOR: 2 lados altos adyacentes
-    if (highSides.length === 2 && lowSides.length === 0) {
-      const adjacent = this.areAdjacent(highSides[0], highSides[1]);
-      if (adjacent) {
-        return {
-          type: this.RAMP_TYPES.OUTER_CORNER,
-          corner: this.getCornerName(highSides),
-          ascending: true,
-        };
-      }
-    }
-
-    // ESQUINA INTERIOR: 2 lados bajos adyacentes
-    if (lowSides.length === 2 && highSides.length === 0) {
-      const adjacent = this.areAdjacent(lowSides[0], lowSides[1]);
-      if (adjacent) {
-        return {
-          type: this.RAMP_TYPES.INNER_CORNER,
-          corner: this.getCornerName(lowSides),
-          ascending: false,
-        };
-      }
-    }
-
-    return { type: this.RAMP_TYPES.NONE };
   }
+
+  return { type: this.RAMP_TYPES.NONE };
+}
 
   getNeighborHeights(x, y) {
     const getHeight = (nx, ny) => {

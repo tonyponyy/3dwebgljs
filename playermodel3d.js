@@ -5,36 +5,43 @@
 // ================= CONFIGURACIÓN ======================
 const PLAYER_CONFIG = {
   // Kart
-  MAX_SPEED: 0.90,
-  ACCELERATION: 0.020,
+  MAX_SPEED: 0.80,
+  MAX_SPEED_TURBO: 1.6,
+  ACCELERATION: 0.003,
   BRAKE_DECELERATION: 0.04,
   ROLL_DECELERATION: 0.006,
+
+  // Derrape
+LATERAL_FRICTION: 0.85,
+DRIFT_FRICTION: 0.93,
+DRIFT_STEER_MULT: 0.6,
+AUTO_DRIFT_THRESHOLD: 0.999,  // ✅ NUEVO - Umbral de giro para derrape automático (0-1)
+AUTO_DRIFT_MIN_SPEED: 0.3,  // ✅ NUEVO - Velocidad mínima para auto-derrapar
 
   // Dirección
   STEER_ANGLE: 0.045,
   STEER_RESPONSE: 0.18,
   MIN_STEER_SPEED: 0.05,
+  //TURBO COUNT :
+  TURBO_COUNT:100000,
+  TURBO_LOSS:0.3,
 
-  // Derrape
-  LATERAL_FRICTION: 0.85,
-  DRIFT_FRICTION: 0.93,
-  DRIFT_STEER_MULT: 1.6,
 
   // Salto
-  JUMP_FORCE: 0.35,
+  JUMP_FORCE: 0.0,
   GRAVITY: 0.015,
-  MAX_FALL_SPEED: 0.5,
+  MAX_FALL_SPEED: 0.3,
   COYOTE_TIME: 0.2,
   
   // ✅ FÍSICAS PERRONAS
-  BOUNCE_DAMPING: 0.4,        // Rebote al caer (0.0 = sin rebote, 1.0 = rebote total)
+  BOUNCE_DAMPING: 1.4,        // Rebote al caer (0.0 = sin rebote, 1.0 = rebote total)
   MIN_BOUNCE_VELOCITY: 0.15,  // Velocidad mínima para rebotar
   ROTATION_SMOOTHING: 0.15,   // Suavizado de rotación (más bajo = más suave)
   TILT_SPEED_FACTOR: 0.3,     // Inclinación por velocidad en rampas
-  LEAN_ANGLE_MAX: 0.4,        // Inclinación lateral máxima en curvas
+  LEAN_ANGLE_MAX: 0.3,        // Inclinación lateral máxima en curvas
   LEAN_SPEED: 0.12,           // Velocidad de inclinación lateral
   PITCH_SPEED: 0.2,           // Velocidad de cabeceo (adelante/atrás)
-  MAX_PITCH: 0.3,             // Cabeceo máximo
+  MAX_PITCH: 0.9,             // Cabeceo máximo
   AIR_ROTATION_SPEED: 0.05    // Rotación adicional en el aire
 };
 
@@ -43,7 +50,7 @@ const MODEL_CONFIG = {
   MODEL_NAME: 'coche',
   SCALE: 0.6,
   OFFSET: { x: 0, y: 0, z: 0 },
-  BASE_ROTATION: { x: 0, y: 2, z: 0 },
+  BASE_ROTATION: { x: 1, y: 10, z: 0 },
   TILE: 51
 };
 
@@ -57,7 +64,8 @@ function initPlayer(playerObject, tileMap, independentObjects) {
     z: playerObject.z,
     tile: MODEL_CONFIG.TILE,
     scale: MODEL_CONFIG.SCALE,
-    rotation: { ...MODEL_CONFIG.BASE_ROTATION }
+    rotation: { ...MODEL_CONFIG.BASE_ROTATION },
+    turbo: false
   };
 
   return {
@@ -67,12 +75,14 @@ function initPlayer(playerObject, tileMap, independentObjects) {
     vx: 0,
     vy: 0,
     speed: 0,
-
+    //turbo count
+    turbo_count: PLAYER_CONFIG.TURBO_COUNT,
+    turbo_temp:0,
     // Dirección
     angle: 0,
     steer: 0,
     isDrifting: false,
-
+    autoDriftActive: false,
     // Vertical
     velocityZ: 0,
     isJumping: false,
@@ -97,6 +107,8 @@ function initPlayer(playerObject, tileMap, independentObjects) {
 
 // ================= UPDATE PRINCIPAL ======================
 function updatePlayer(player, keys, deltaTime = 1 / 60) {
+    update_turbo();
+
   const obj = player.object;
   const grounded = isGrounded(
     obj.x,
@@ -107,41 +119,76 @@ function updatePlayer(player, keys, deltaTime = 1 / 60) {
   );
 
   // ================= ACELERACIÓN ======================
+  if ((keys['Spacebar'] ||  keys[' ']) && player.turbo_count > 0 ) {
+    player.turbo = true;
+    player.turbo_count -=PLAYER_CONFIG.TURBO_LOSS
+  }else{
+    player.turbo = false;
+  }
+  
   if (keys['ArrowUp'] || keys['w']) {
+    if ( !player.turbo){
     player.speed += PLAYER_CONFIG.ACCELERATION;
+    }else{
+    player.speed += PLAYER_CONFIG.ACCELERATION*3;
+    }
+    
   } else if (keys['ArrowDown'] || keys['s']) {
     player.speed -= PLAYER_CONFIG.BRAKE_DECELERATION;
   } else {
     if (player.speed > 0) player.speed -= PLAYER_CONFIG.ROLL_DECELERATION;
     if (player.speed < 0) player.speed += PLAYER_CONFIG.ROLL_DECELERATION;
   }
+  if (player.turbo){
+  if (player.speed > PLAYER_CONFIG.MAX_SPEED_TURBO ){
+        player.speed -= 0.009
+    }
+  }else{
+   if (player.speed > PLAYER_CONFIG.MAX_SPEED ){
+        player.speed -= 0.006
+    }
 
-  player.speed = Math.max(
-    -PLAYER_CONFIG.MAX_SPEED * 0.4,
-    Math.min(PLAYER_CONFIG.MAX_SPEED, player.speed)
-  );
+  }
+   if (player.speed < -0.2){
+        player.speed = -0.2
+    }
 
   // ================= DIRECCIÓN ======================
-  let steerInput = 0;
-  if (keys['ArrowLeft'] || keys['a']) steerInput += 1;
-  if (keys['ArrowRight'] || keys['d']) steerInput -= 1;
+  // ================= DIRECCIÓN ======================
+let steerInput = 0;
+if (keys['ArrowLeft'] || keys['a']) steerInput += 1;
+if (keys['ArrowRight'] || keys['d']) steerInput -= 1;
 
-  player.isDrifting = keys['Shift'];
+// ✅ DERRAPE AUTOMÁTICO - Se activa con giros pronunciados
+const speedRatio = Math.abs(player.speed) / PLAYER_CONFIG.MAX_SPEED;
+const isSteeringHard = Math.abs(steerInput) > 0 && speedRatio > PLAYER_CONFIG.AUTO_DRIFT_MIN_SPEED;
 
-  const steerStrength =
-    Math.abs(player.speed) > PLAYER_CONFIG.MIN_STEER_SPEED
-      ? steerInput * PLAYER_CONFIG.STEER_ANGLE
-      : 0;
+// Activar auto-drift si el giro es muy pronunciado
+if (isSteeringHard && Math.abs(player.steer) > PLAYER_CONFIG.AUTO_DRIFT_THRESHOLD * PLAYER_CONFIG.STEER_ANGLE) {
+  player.autoDriftActive = true;
+  accion_derrape();
+} else if (Math.abs(steerInput) < 0.5 || speedRatio < PLAYER_CONFIG.AUTO_DRIFT_MIN_SPEED * 0.8) {
+  // Desactivar cuando se suelta el giro o se va muy lento
+  player.autoDriftActive = false;
+}
 
-  const steerMult = player.isDrifting
-    ? PLAYER_CONFIG.DRIFT_STEER_MULT
-    : 1;
+// Combinar drift manual (Shift) con drift automático
+player.isDrifting = keys['Shift'] || player.autoDriftActive;
 
-  player.steer +=
-    (steerStrength * steerMult - player.steer) *
-    PLAYER_CONFIG.STEER_RESPONSE;
+const steerStrength =
+  Math.abs(player.speed) > PLAYER_CONFIG.MIN_STEER_SPEED
+    ? steerInput * PLAYER_CONFIG.STEER_ANGLE
+    : 0;
 
-  player.angle += player.steer * Math.sign(player.speed);
+const steerMult = player.isDrifting
+  ? PLAYER_CONFIG.DRIFT_STEER_MULT
+  : 1;
+const airControlFactor = grounded ? 1.0 : 0.3; // Solo 30% de control en el aire
+player.steer +=
+  (steerStrength * steerMult - player.steer) *
+  PLAYER_CONFIG.STEER_RESPONSE * airControlFactor;
+
+player.angle += player.steer * Math.sign(player.speed);
 
   // ================= VECTOR MOVIMIENTO ======================
   const forwardX = -Math.sin(player.angle);
@@ -208,9 +255,16 @@ function updatePlayer(player, keys, deltaTime = 1 / 60) {
       const bounceForce = -player.velocityZ * PLAYER_CONFIG.BOUNCE_DAMPING;
       player.velocityZ = bounceForce;
       player.wasInAir = false;
+       // ✅ PERDER VELOCIDAD AL CAER - Más impacto = más pérdida
+  const impactForce = Math.abs(player.velocityZ);
+  const speedLoss = Math.min(0.4, impactForce * 0.8); // Hasta 40% de pérdida
+  player.speed *= (1 - speedLoss);
       
       // Pequeño impulso hacia arriba visual
       player.targetPitch = -0.2;
+    //const framesInAir = Math.floor(player.airTime * 60); // Convertir tiempo a frames (60 FPS)
+    accion_salto(player.airTime);
+
     } else {
       player.velocityZ = 0;
       player.wasInAir = false;
@@ -310,12 +364,12 @@ function updatePlayer(player, keys, deltaTime = 1 / 60) {
   
   // 3. APLICAR ROTACIÓN AL MODELO 3D
   obj.rotation.x = player.pitch;  // Cabeceo
-  obj.rotation.y = 4.7 + player.angle;  // Dirección
+  obj.rotation.y = 12.6 + player.angle;  // Dirección
   obj.rotation.z = player.roll;  // Inclinación lateral
 
   // ================= ACTUALIZAR ARRAY ======================
   const ARRAY_PLAYER = 0;
-  resolve_all(obj, ARRAY_PLAYER, player.independentObjects);
+  resolve_all(obj, ARRAY_PLAYER, coches);
 }
 
 // ================= ✅ CALCULAR PENDIENTE DEL TERRENO ======================
@@ -413,4 +467,24 @@ function setPhysicsConfig(config) {
 
 function getPhysicsConfig() {
   return { ...PLAYER_CONFIG };
+}
+
+function accion_derrape(){
+    console.log("derrape")
+    player.turbo_temp +=10
+}
+
+function accion_salto(tiempo){
+    let frames = Math.floor(tiempo * 60);
+    let boost_turbo = parseInt(frames/3)
+    console.log("ha estado en el aire un total de "+frames+" frames!, boost turbo +"+boost_turbo+"%")
+    player.turbo_temp += boost_turbo
+}
+
+function update_turbo(){
+    if (player.turbo_temp > 0){
+        player.turbo_temp--
+        player.turbo_count++
+        
+    }
 }

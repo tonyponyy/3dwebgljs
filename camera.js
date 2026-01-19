@@ -1,8 +1,9 @@
 // camera.js - Cámara que sigue al jugador
 
 const CAMERA_CONFIG = {
-  DISTANCE: 4.0,      // Distancia detrás del jugador
-  HEIGHT: 3.0,        // Altura sobre el jugador
+  DISTANCE: 6.0,      // Distancia detrás del jugador
+  HEIGHT: 3.0,
+  HEIGHT_TURBO:2.0,        // Altura sobre el jugador
   SMOOTHNESS: 0.25,   // Suavidad del seguimiento (0-1, menor = más suave)
   LOOK_AHEAD: 1.0     // Cuánto mira hacia adelante
 };
@@ -19,7 +20,10 @@ function updatePlayerCamera(camera, player) {
   // Calcular posición objetivo detrás del jugador
   const targetX = pos.x + Math.sin(pos.angle) * CAMERA_CONFIG.DISTANCE+player.vx;
   const targetY = pos.y - Math.cos(pos.angle) * CAMERA_CONFIG.DISTANCE+player.vy;
-  const targetZ = pos.z + CAMERA_CONFIG.HEIGHT;
+  let targetZ = pos.z + CAMERA_CONFIG.HEIGHT;
+  if (player.turbo){
+    targetZ = pos.z + CAMERA_CONFIG.HEIGHT_TURBO
+  }
   
   // Suavizar movimiento de la cámara (interpolación)
   camera.x += (targetX - camera.x) * CAMERA_CONFIG.SMOOTHNESS;

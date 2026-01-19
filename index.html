@@ -250,7 +250,6 @@ const MAP_WIDTH = 200;
 const MAP_HEIGHT = 200;
 </script>
 
-<script src="image64.js"></script>
 <script src="isla.js"></script>
 <script src="collision.js"></script>
 <script src="glitter7engine.js"></script>
@@ -309,8 +308,8 @@ const engine = new Glitter7engine(canvas, {
     },
         51: {
       modelName: 'coche',
-      scale: 0.6,
-      rotation: { x: 0, y: 11 , z: 0 },
+      scale: 0.2,
+      rotation: { x: 0, y: 0 , z: 0 },
      // height: 0,  // Altura base (o usa heightMap)
       offset: { x: 0, y: 0, z: -4 },  // Ajustar posición para centrar
       groundTile: 2  // Tile 5 como suelo debajo del árbol
@@ -384,7 +383,7 @@ imageToBase64("img/carretera1.png", (img) => engine.loadSpritesheet(img))
  engine.loadModel('tree', 'model/tree/tree.obj');
  engine.loadModel('tree2', 'model/tree/arbolcono.obj');
  engine.loadModel('tree3', 'model/tree/arbol4.obj');
-  engine.loadModel('coche', 'model/tree/coche1.obj');
+  engine.loadModel('coche', 'model/tree/cochev1.obj');
 
 
 
@@ -398,12 +397,19 @@ let playerObject = {
   y: 149,
   z: 1,  // ← CAMBIO 1: Elevar el coche
   tile: 51,
-  scale: 0.5,
-  rotation: { x: 0, y: 0, z: 0 }
+  scale: 0.2,
+  rotation: { x: 10, y: 1, z: 0 }
 };
-
+let coches = [playerObject];
+let fx = [
+  { tile: 30, x: 109.0, y: 149.0, z: 2.0 , scale:6 },
+  { tile: 17, x: 109.0, y: 149.0, z: 0.0 },
+]
 const independentObjects = [
-  playerObject,  // ← CAMBIO 2: Asegurar que esté aquí primero
+  coches
+  ,
+  fx
+  ,  
   engine.createModelInstance('cat', 124, 103, 5, { 
     scale: 2.15, 
     tile: 48,
@@ -417,7 +423,8 @@ let player = initPlayer(playerObject, tileMap, independentObjects);
 //cargar fuente
 const font_img = new Image();
   font_img.src = 'img/font.png';
-
+const gui = new Image();
+  gui.src = 'img/gui.png';
 
 // Loop de render
 function gameLoop() {
@@ -429,12 +436,15 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
+
 function render(){
   engine.render(independentObjects, true);
   let temp_canvas = engine.canvas // <-- este canvas es el que está con antialiasing
   ctx.drawImage(temp_canvas, 0, 0); //<-- este ctx no tiene antialiasing pero imprime el canvas del engine con los pixeles grandes como puños
-  print_text("test", 0, 0,ctx)
-  print_title("Pruebas teeeeeeest ^^", 30, 30)
+  ctx.drawImage(gui,0,0)
+  print_text("test", 0, 0,ctx);
+  print_title((parseInt(player.speed*160)+"KMH"), 750, 475)
+  print_title((parseInt(player.turbo_count)+"%"), 75, 475)
 }
 
 gameLoop();
