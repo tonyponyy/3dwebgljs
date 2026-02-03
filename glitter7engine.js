@@ -2295,7 +2295,7 @@ void main() {
     this.gl.uniform1i(this.uniformLocations.billboard.spritesheet, 0);
 
     // ✅ OPTIMIZACIÓN 5: Configurar depth/blend solo una vez al inicio del render pass
-    this.gl.depthFunc(this.gl.LEQUAL);
+    this.gl.depthFunc(this.gl.LESS);
     this.gl.polygonOffset(-1.0, -1.0);
     this.gl.enable(this.gl.POLYGON_OFFSET_FILL);
 
@@ -2510,137 +2510,240 @@ void main() {
   }
 
   // Modificar el método render principal
-  render(independentObjects = [], renderSky = true) {
-    this.time += 0.016;
-    let camera = this.camera;
-    this.lastCamera = camera;
-    this.updateTrigCache(camera);
+render(independentObjects = [], renderSky = true) {
+  this.time += 0.016;
+  let camera = this.camera;
+  this.lastCamera = camera;
+  this.updateTrigCache(camera);
 
-    this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+  this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
 
-    if (renderSky) this.renderSky();
-    if (this.SKYDOME_ENABLED) this.renderSkydome(camera);
+  if (renderSky) this.renderSky();
+  if (this.SKYDOME_ENABLED) this.renderSkydome(camera);
 
-    this.renderGround(camera);
-    this.gl.clear(this.gl.DEPTH_BUFFER_BIT);
+  this.renderGround(camera);
+  this.gl.clear(this.gl.DEPTH_BUFFER_BIT);
 
-    const allObjects = this.collectRenderableObjects(
-      camera,
-      independentObjects.flat(2)
-    );
+  const allObjects = this.collectRenderableObjects(
+    camera,
+    independentObjects.flat(2)
+  );
 
-    this.gl.enable(this.gl.DEPTH_TEST);
-    this.gl.depthFunc(this.gl.LEQUAL);
-    this.gl.depthMask(true);
-    this.gl.disable(this.gl.BLEND);
+  this.gl.enable(this.gl.DEPTH_TEST);
+  this.gl.depthFunc(this.gl.LESS);
+  this.gl.depthMask(true);
+  this.gl.disable(this.gl.BLEND);
 
-    // Agrupar objetos por tipo
-    let currentBlockTile = null;
-    let blockBatch = [];
-    let currentModelName = null;
-    let modelBatch = [];
+  // Agrupar objetos por tipo
+  let currentBlockTile = null;
+  let blockBatch = [];
+  // ❌ ELIMINAR: let currentModelName = null;
+  // ❌ ELIMINAR: let modelBatch = [];
 
-    for (const obj of allObjects) {
-      if (obj.type === "block") {
-        // Dibujar modelos 3D pendientes
-        if (modelBatch.length > 0) {
-          this.drawModel3DInstanced(currentModelName, modelBatch, camera);
-          modelBatch = [];
-          currentModelName = null;
-        }
-
-        // Agrupar bloques
-        if (currentBlockTile === obj.tile) {
-          blockBatch.push(obj);
-        } else {
-          if (blockBatch.length > 0) {
-            this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
-          }
-          currentBlockTile = obj.tile;
-          blockBatch = [obj];
-        }
-      } else if (obj.type === "model3d") {
-        // Dibujar bloques pendientes
+  for (const obj of allObjects) {
+    if (obj.type === "block") {
+      // ✅ Dibujar modelos 3D pendientes individualmente
+      // (ya no hay batch)
+      
+      // Agrupar bloques
+      if (currentBlockTile === obj.tile) {
+        blockBatch.push(obj);
+      } else {
         if (blockBatch.length > 0) {
           this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
-          blockBatch = [];
-          currentBlockTile = null;
         }
-
-        // Agrupar modelos 3D
-        if (currentModelName === obj.modelName) {
-          modelBatch.push(obj);
-        } else {
-          if (modelBatch.length > 0) {
-            this.drawModel3DInstanced(currentModelName, modelBatch, camera);
-          }
-          currentModelName = obj.modelName;
-          modelBatch = [obj];
-        }
-      } else if (obj.type === "billboard") {
-        // Dibujar pendientes
-        if (blockBatch.length > 0) {
-          this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
-          blockBatch = [];
-          currentBlockTile = null;
-        }
-        if (modelBatch.length > 0) {
-          this.drawModel3DInstanced(currentModelName, modelBatch, camera);
-          modelBatch = [];
-          currentModelName = null;
-        }
-
-        this.gl.enable(this.gl.BLEND);
-        this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
-        this.gl.depthMask(false);
-
-        const billboardBatch = [obj];
-        let nextIndex = allObjects.indexOf(obj) + 1;
-
-        while (nextIndex < allObjects.length) {
-          const nextObj = allObjects[nextIndex];
-          if (nextObj.type === "billboard" && nextObj.tile === obj.tile) {
-            billboardBatch.push(nextObj);
-            nextIndex++;
-          } else {
-            break;
-          }
-        }
-
-        this.drawBillboardsInstanced(obj.tile, billboardBatch);
-        allObjects.splice(
-          allObjects.indexOf(obj) + 1,
-          billboardBatch.length - 1
-        );
-
-        this.gl.depthMask(true);
-        this.gl.disable(this.gl.BLEND);
-      } else if (obj.type === "ramp") {
-        if (blockBatch.length > 0) {
-          this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
-          blockBatch = [];
-          currentBlockTile = null;
-        }
-        if (modelBatch.length > 0) {
-          this.drawModel3DInstanced(currentModelName, modelBatch, camera);
-          modelBatch = [];
-          currentModelName = null;
-        }
-        this.drawRamp(obj, camera);
+        currentBlockTile = obj.tile;
+        blockBatch = [obj];
       }
-    }
+    } else if (obj.type === "model3d") {
+      // ✅ Dibujar bloques pendientes
+      if (blockBatch.length > 0) {
+        this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
+        blockBatch = [];
+        currentBlockTile = null;
+      }
 
-    // Dibujar últimos batches
-    if (blockBatch.length > 0) {
-      this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
-    }
-    if (modelBatch.length > 0) {
-      this.drawModel3DInstanced(currentModelName, modelBatch, camera);
-    }
+      // ✅ CAMBIO: Renderizar cada modelo individualmente
+      this.drawSingleModel3D(obj, camera);
+      
+    } else if (obj.type === "billboard") {
+      // Dibujar pendientes
+      if (blockBatch.length > 0) {
+        this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
+        blockBatch = [];
+        currentBlockTile = null;
+      }
 
-    this.gl.disable(this.gl.DEPTH_TEST);
-    this.gl.enable(this.gl.BLEND);
+      this.gl.enable(this.gl.BLEND);
+      this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
+      this.gl.depthMask(false);
+
+      const billboardBatch = [obj];
+      let nextIndex = allObjects.indexOf(obj) + 1;
+
+      while (nextIndex < allObjects.length) {
+        const nextObj = allObjects[nextIndex];
+        if (nextObj.type === "billboard" && nextObj.tile === obj.tile) {
+          billboardBatch.push(nextObj);
+          nextIndex++;
+        } else {
+          break;
+        }
+      }
+
+      this.drawBillboardsInstanced(obj.tile, billboardBatch);
+      allObjects.splice(
+        allObjects.indexOf(obj) + 1,
+        billboardBatch.length - 1
+      );
+
+      this.gl.depthMask(true);
+      this.gl.disable(this.gl.BLEND);
+    } else if (obj.type === "ramp") {
+      if (blockBatch.length > 0) {
+        this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
+        blockBatch = [];
+        currentBlockTile = null;
+      }
+      this.drawRamp(obj, camera);
+    }
   }
+
+  // Dibujar últimos batches
+  if (blockBatch.length > 0) {
+    this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
+  }
+
+  this.gl.disable(this.gl.DEPTH_TEST);
+  this.gl.enable(this.gl.BLEND);
+}
+
+drawSingleModel3D(modelObj, camera) {
+  const model = this.models3D.get(modelObj.modelName);
+  if (!model) return;
+
+  this.gl.useProgram(this.modelProgram);
+
+  // Configurar geometría del modelo
+  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, model.buffer);
+
+  this.gl.enableVertexAttribArray(this.attribLocations.model.position);
+  this.gl.vertexAttribPointer(
+    this.attribLocations.model.position,
+    3,
+    this.gl.FLOAT,
+    false,
+    32,
+    0
+  );
+
+  this.gl.enableVertexAttribArray(this.attribLocations.model.texCoord);
+  this.gl.vertexAttribPointer(
+    this.attribLocations.model.texCoord,
+    2,
+    this.gl.FLOAT,
+    false,
+    32,
+    12
+  );
+
+  this.gl.enableVertexAttribArray(this.attribLocations.model.normal);
+  this.gl.vertexAttribPointer(
+    this.attribLocations.model.normal,
+    3,
+    this.gl.FLOAT,
+    false,
+    32,
+    20
+  );
+
+  // Uniforms
+  this.gl.uniform4f(
+    this.uniformLocations.model.camera,
+    camera.x,
+    camera.y,
+    camera.z,
+    camera.angle
+  );
+  this.gl.uniform2f(
+    this.uniformLocations.model.resolution,
+    this.canvas.width,
+    this.canvas.height
+  );
+  
+  // ✅ Posición y transformación única para este modelo
+  this.gl.uniform3f(
+    this.uniformLocations.model.modelPos,
+    modelObj.x,
+    modelObj.y,
+    modelObj.z
+  );
+  this.gl.uniform1f(
+    this.uniformLocations.model.modelScale,
+    modelObj.scale || 1.0
+  );
+  
+  const rotation = modelObj.rotation || { x: 0, y: 0, z: 0 };
+  this.gl.uniform3f(
+    this.uniformLocations.model.modelRotation,
+    rotation.x,
+    rotation.y,
+    rotation.z
+  );
+  
+  this.gl.uniform1i(
+    this.uniformLocations.model.spriteIndex,
+    modelObj.tile
+  );
+  this.gl.uniform1f(
+    this.uniformLocations.model.spriteCount,
+    this.tile_items_size
+  );
+
+  // Iluminación
+  this.gl.uniform1i(
+    this.uniformLocations.model.illumination,
+    this.ILLUMINATION
+  );
+  this.gl.uniform1f(this.uniformLocations.model.ambient, this.AMBIENT_LIGHT);
+  this.gl.uniform1f(this.uniformLocations.model.diffuse, this.LIGHT_DIFFUSE);
+
+  const len = Math.sqrt(
+    this.lightDir[0] * this.lightDir[0] +
+      this.lightDir[1] * this.lightDir[1] +
+      this.lightDir[2] * this.lightDir[2]
+  );
+  this.gl.uniform3f(
+    this.uniformLocations.model.lightDir,
+    this.lightDir[0] / len,
+    this.lightDir[1] / len,
+    this.lightDir[2] / len
+  );
+
+  // Textura
+  this.gl.activeTexture(this.gl.TEXTURE0);
+  this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
+  this.gl.uniform1i(this.uniformLocations.model.spritesheet, 0);
+
+  // Niebla
+  this.gl.uniform1i(this.uniformLocations.model.fogEnabled, this.FOG_ENABLED);
+  this.gl.uniform1f(this.uniformLocations.model.fogStart, this.FOG_START);
+  this.gl.uniform1f(this.uniformLocations.model.fogEnd, this.FOG_END);
+  this.gl.uniform3f(
+    this.uniformLocations.model.fogColor,
+    this.FOG_COLOR[0],
+    this.FOG_COLOR[1],
+    this.FOG_COLOR[2]
+  );
+
+  // Dibujar
+  this.gl.drawArrays(this.gl.TRIANGLES, 0, model.vertexCount);
+
+  // Limpiar
+  this.gl.disableVertexAttribArray(this.attribLocations.model.position);
+  this.gl.disableVertexAttribArray(this.attribLocations.model.texCoord);
+  this.gl.disableVertexAttribArray(this.attribLocations.model.normal);
+}
 
   // Métodos de utilidad
   toggleIllumination() {
@@ -3309,10 +3412,7 @@ getOuterCornerRampVertices(corner, ascending) {
     }
   }
 
-  // Método para crear instancias de modelos en la escena
   createModelInstance(modelName, x, y, z, options = {}) {
-    // ✅ No verificar aquí, solo crear el objeto
-    // El modelo puede no estar cargado todavía, pero eso está OK
 
     return {
       type: "model3d",
