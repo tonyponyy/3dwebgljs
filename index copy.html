@@ -1,0 +1,308 @@
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Motor 3D - Iluminación Configurable</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #333; }
+    canvas { display: block; }
+
+
+  </style>
+</head>
+<body>
+  <!-- Controles móviles 
+<canvas id="glCanvas" width="960" height="540"></canvas>-->
+<canvas id="glCanvas" width="480" height="270"></canvas>
+
+<canvas id="canvasaux" width="960" height="540"></canvas>
+
+<!-- Controles móviles -->
+<div class="mobile-controls">
+  <!-- D-Pad direccional -->
+  <div id="dpad-area">
+    <div id="dpad-center"></div>
+    <div class="dpad-btn" id="btn-up">▲</div>
+    <div class="dpad-btn" id="btn-down">▼</div>
+    <div class="dpad-btn" id="btn-left">◄</div>
+    <div class="dpad-btn" id="btn-right">►</div>
+  </div>
+  
+  <!-- Botón de acción -->
+  <div id="action-button">
+    <div class="action-btn" id="btn-action"></div>
+  </div>
+</div>
+
+<script>
+// ====== Control de flechas y táctil
+canvas_aux = document.getElementById('canvasaux');
+const ctx = canvas_aux.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+
+const keys = {};
+
+window.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  
+  if (e.key === 'l' || e.key === 'L') {
+    ILLUMINATION = !ILLUMINATION;
+    console.log('Iluminación:', ILLUMINATION ? 'ACTIVADA' : 'DESACTIVADA');
+  }
+});
+
+window.addEventListener('keyup', e => keys[e.key] = false);
+
+// ====== Controles táctiles ======
+function setupTouchControls() {
+  const btnUp = document.getElementById('btn-up');
+  const btnDown = document.getElementById('btn-down');
+  const btnLeft = document.getElementById('btn-left');
+  const btnRight = document.getElementById('btn-right');
+  const btnAction = document.getElementById('btn-action');
+  
+  // Mapeo de botones a teclas
+  const buttonKeyMap = {
+    'btn-up': 'ArrowUp',
+    'btn-down': 'ArrowDown',
+    'btn-left': 'ArrowLeft',
+    'btn-right': 'ArrowRight',
+    'btn-action': ' ' // Espacio para acción
+  };
+  
+  // Función para manejar inicio de toque
+  function handleTouchStart(e, buttonId) {
+    e.preventDefault();
+    const key = buttonKeyMap[buttonId];
+    keys[key] = true;
+  }
+  
+  // Función para manejar fin de toque
+  function handleTouchEnd(e, buttonId) {
+    e.preventDefault();
+    const key = buttonKeyMap[buttonId];
+    keys[key] = false;
+  }
+  
+  // Asignar eventos a cada botón
+  [btnUp, btnDown, btnLeft, btnRight, btnAction].forEach(btn => {
+    btn.addEventListener('touchstart', (e) => handleTouchStart(e, btn.id));
+    btn.addEventListener('touchend', (e) => handleTouchEnd(e, btn.id));
+    btn.addEventListener('touchcancel', (e) => handleTouchEnd(e, btn.id));
+    
+    // También soportar mouse para testing en desktop
+    btn.addEventListener('mousedown', (e) => handleTouchStart(e, btn.id));
+    btn.addEventListener('mouseup', (e) => handleTouchEnd(e, btn.id));
+    btn.addEventListener('mouseleave', (e) => handleTouchEnd(e, btn.id));
+  });
+}
+
+// Inicializar controles táctiles
+setupTouchControls();
+
+// ======= Configuración =======
+let MAX_RENDER_DISTANCE = 50;
+let FRUSTUM_MARGIN = 0.4;
+
+let billboard_tiles = [6,7,11,12];
+let block_tiles = [35,36,37,38,10];
+const billboard_tiles_set = new Set(billboard_tiles);
+const block_tiles_set = new Set(block_tiles);
+
+let tile_heights = {10:23};
+
+const TILE_SIZE = 96;
+const MAP_WIDTH = 40;
+const MAP_HEIGHT = 40;
+</script>
+
+<script src="mapa_isla.js"></script>
+<script src="collision.js"></script>
+<script src="glitter7engine.js"></script>
+<script src="camera.js"></script>
+<script src="print_text.js"></script>
+
+
+<script src="controls.js"></script>
+<script src="playermodel3d.js"></script>
+
+<script>
+  /*<script src="player2.js"><script>*/
+// Recursos
+tileMap = TileMaps["mapa_isla"].layers[0].data
+
+  const ei = TileMaps["mapa_isla"].layers[1].data.map(v => v > 51 ? v - 64 : v);
+// Crear el motor
+const canvas = document.getElementById('glCanvas');
+const engine = new Glitter7engine(canvas, {
+
+  //modelo 3d
+    model3dTiles: [8,9,49,50,51],
+    model3dConfig: {
+    8: {
+      modelName: 'cat',
+      scale: 0.1,
+      rotation: { x: 1.5, y: Math.PI / 4, z: 0 },
+     // height: 0,  // Altura base (o usa heightMap)
+      offset: { x: 0, y: -0.2, z: 12 },  // Ajustar posición para centrar
+      groundTile: 1  // Tile 5 como suelo debajo del árbol
+    },
+     9: {
+      modelName: 'deer',
+      scale: 0.006,
+      rotation: { x: 0, y: 0, z: 0 },
+     // height: 0,  // Altura base (o usa heightMap)
+    //  offset: { x: 0, y: 0.3, z: 0 },  // Ajustar posición para centrar
+      groundTile: 1  // Tile 5 como suelo debajo del árbol
+    },
+
+  },
+
+
+
+waterTiles: [4,3], // Si tienes más tiles de agua
+waterSpeed: 0.8,   // Más rápido
+waterWave: 0.2,    // Olas más pronunciadas
+     
+
+
+  map: {
+    array: tileMap,
+    mapWidth: 200,
+    mapHeight: 200,
+  },
+  tileSize: 64,
+  maxRenderDistance: 900,
+heightMap: ei
+
+  ,
+
+  
+  billboardTiles: billboard_tiles,
+  blockTiles: block_tiles,
+  tileHeights: tile_heights,
+  
+  light: {
+    illumination: true,
+    ambientLight: 0.5,
+    lightDiffuse: 0.7,
+    lightDir: [0.3, 0.7, 0.5]
+  },
+  
+  skydome: {
+    enabled: true,
+    radius: 100,
+    segments: 12,
+    rep_h: 4,
+    rep_v: 10
+  },
+  background:{
+    color1:[89,79,249],
+    color2:[89,79,249]
+  },
+  
+  fog: {
+    enabled: true,
+    start: 60,
+    end: 100,
+    //color: [0.5, 0.5, 0.5]
+  },
+ rotatableBillboards: [39],
+   billboardScales: {
+    11: 1.5,   // Todos los árboles (tile 4) son el doble de grandes
+  },
+  defaultBillboardGround: 1,
+  billboardGroundTiles: {39: 1}
+});
+
+// Cargar recursos
+imageToBase64("img/img_cielo.png", (img) => engine.loadSkydomeTexture(img))
+imageToBase64("img/texturas96.png", (img) => engine.loadSpritesheet(img))
+engine.loadModel('deer', 'model/deer.obj');
+ engine.loadModel('cat', 'model/cat/cat.obj');
+ engine.loadModel('tree', 'model/tree/tree.obj');
+ engine.loadModel('tree2', 'model/tree/arbolcono.obj');
+ engine.loadModel('tree3', 'model/tree/arbol4.obj');
+  engine.loadModel('coche', 'model/tree/cochev1.obj');
+
+
+
+
+// Objetos independientes
+//let playerObject = { tile: 6, x: 109.99, y: 149, z: 10.0,scale:0.5,orientation:0.29 };
+let playerObject = {
+  type: 'model3d',
+  modelName: 'coche',
+  x: 109.99,
+  y: 149,
+  z: 1,  // ← CAMBIO 1: Elevar el coche
+  tile: 51,
+  scale: 0.2,
+  rotation: { x: 10, y: 1, z: 0 }
+};
+let coches = [playerObject];
+let fx = [
+  { tile: 30, x: 109.0, y: 149.0, z: 2.0 , scale:6 },
+  { tile: 17, x: 109.0, y: 149.0, z: 0.0 },
+]
+const independentObjects = [
+  coches
+  ,
+  fx
+  ,  
+  engine.createModelInstance('cat', 124, 103, 5, { 
+    scale: 2.15, 
+    tile: 48,
+    rotation: { x: 1.5, y: 0, z: 0 }
+  })
+];
+
+let player = initPlayer(playerObject, tileMap, independentObjects);
+//applyMovementPreset('REALISTIC');
+
+//cargar fuente
+const font_img = new Image();
+  font_img.src = 'img/font.png';
+const gui = new Image();
+  gui.src = 'img/gui.png';
+
+// Loop de render
+function gameLoop() {
+  //engine.render(independentObjects, true);
+  render();
+  updatePlayer(player, keys);
+  updateCamera();
+  
+  requestAnimationFrame(gameLoop);
+}
+
+
+function render(){
+  engine.render(independentObjects, true);
+}
+
+gameLoop();
+
+function updateCamera() {
+  updatePlayerCamera(engine.camera, player);
+ // player.angle = 9.5
+}
+
+// Función auxiliar para pasar a base64 las imágenes
+function imageToBase64(url, callback) {
+  const img = new Image();
+  img.crossOrigin = "Anonymous";
+  img.onload = function() {
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const base64 = canvas.toDataURL("image/png");
+    callback(base64);
+  };
+  img.src = url;
+}
+</script>
+</body>
+</html>

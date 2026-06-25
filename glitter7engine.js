@@ -42,7 +42,7 @@ class Glitter7engine {
     this.billboard_tiles_set = new Set(this.billboard_tiles);
     this.block_tiles_set = new Set(this.block_tiles);
     this.tile_heights = config.tileHeights || {};
-    this.heightMap = config.heightMap || null;
+    this.heightMap = config.heightMap ? this.flipMapX(config.heightMap) : null;
     this.DEFAULT_BILLBOARD_GROUND =
       config.defaultBillboardGround || DEFAULT_BILLBOARD_GROUND_DEFAULT;
     this.billboard_ground_tiles = config.billboardGroundTiles || {};
@@ -200,9 +200,10 @@ class Glitter7engine {
     this.initTextures();
     this.initShaders();
     this.initBuffers();
-    this.initBillboardInstancing(); // ← AÑADIR ESTA LÍNEA
+    this.initBillboardInstancing(); 
     this.initUniforms();
-    this.setTileMap(config.map.array);
+    //this.setTileMap(config.map.array);
+    this.setTileMap(this.flipMapX(config.map.array));
   }
 
   initTextures() {
@@ -3426,6 +3427,14 @@ getOuterCornerRampVertices(corner, ascending) {
       customHeight: options.height || null,
     };
   }
+  //metodo para invertir un array:
+  flipMapX(map) {
+  const flipped = new Array(map.length);
+  for (let y = 0; y < this.MAP_HEIGHT; y++)
+    for (let x = 0; x < this.MAP_WIDTH; x++)
+      flipped[y * this.MAP_WIDTH + x] = map[y * this.MAP_WIDTH + (this.MAP_WIDTH - 1 - x)];
+      return flipped;
+    }
 
   //metodo auxiliar para pasar de rgb a 0/1
   normalizeColor(c) {
