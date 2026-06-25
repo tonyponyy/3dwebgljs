@@ -34,6 +34,7 @@ class Glitter7engine {
     this.TILE_SIZE = this.transformNumber(config.tileSize);
     this.MAP_WIDTH = config.map.mapWidth;
     this.MAP_HEIGHT = config.map.mapHeight;
+    this.OUT_LIMIT_TILE = config.out_limit_tile ?? null;
     this.RENDER_SCALE = this.transformNumber(config.renderScale || 1.0);
 
     // Tiles
@@ -42,7 +43,7 @@ class Glitter7engine {
     this.billboard_tiles_set = new Set(this.billboard_tiles);
     this.block_tiles_set = new Set(this.block_tiles);
     this.tile_heights = config.tileHeights || {};
-    this.heightMap = config.heightMap ? this.flipMapX(config.heightMap) : null;
+    this.heightMap = null; // se asigna después del flip en el constructor
     this.DEFAULT_BILLBOARD_GROUND =
       config.defaultBillboardGround || DEFAULT_BILLBOARD_GROUND_DEFAULT;
     this.billboard_ground_tiles = config.billboardGroundTiles || {};
@@ -194,16 +195,33 @@ class Glitter7engine {
     this.cachedSinA = 0;
     this.cameraAngleCache = 0;
     this.objectCount = 0;
-    this.tempObjects = new Array(this.MAP_WIDTH * this.MAP_HEIGHT + 1000);
+    this.tempObjects = [];
+    this._flatIndependentObjects = [];
 
     // Inicializar
     this.initTextures();
     this.initShaders();
     this.initBuffers();
-    this.initBillboardInstancing(); 
+    this.initBillboardInstancing(); // ← AÑADIR ESTA LÍNEA
     this.initUniforms();
-    //this.setTileMap(config.map.array);
+    this.heightMap = config.heightMap ? this.flipMapX(config.heightMap) : null;
     this.setTileMap(this.flipMapX(config.map.array));
+  }
+
+  flipMapX(map) {
+    const flipped = new Array(map.length);
+    for (let y = 0; y < this.MAP_HEIGHT; y++)
+      for (let x = 0; x < this.MAP_WIDTH; x++)
+        flipped[y * this.MAP_WIDTH + x] = map[y * this.MAP_WIDTH + (this.MAP_WIDTH - 1 - x)];
+    return flipped;
+  }
+
+  setIndependentObjects(objects) {
+    this._flatIndependentObjects = objects.flat(2);
+  }
+
+  _pushObject(fields) {
+    this.tempObjects[this.objectCount++] = fields;
   }
 
   initTextures() {
@@ -591,15 +609,15 @@ void main() {
     int tileX = int(floor(worldX));
     int tileY = int(floor(worldY));
     
+    uint tileIndex;
     if(tileX < 0 || tileY < 0 || tileX >= ${this.MAP_WIDTH} || tileY >= ${this.MAP_HEIGHT}) {
-      discard;
-    }
-    
-    vec2 tileTexCoord = vec2(float(tileX) + 0.5, float(tileY) + 0.5) / vec2(${this.MAP_WIDTH}.0, ${this.MAP_HEIGHT}.0);
-    uint tileIndex = texture(u_tileMapTexture, tileTexCoord).r;
-
-    if(tileIndex == 0u) {
-      discard;
+      ${this.OUT_LIMIT_TILE !== null ? `tileIndex = ${this.OUT_LIMIT_TILE}u;` : 'discard;'}
+    } else {
+      vec2 tileTexCoord = vec2(float(tileX) + 0.5, float(tileY) + 0.5) / vec2(${this.MAP_WIDTH}.0, ${this.MAP_HEIGHT}.0);
+      tileIndex = texture(u_tileMapTexture, tileTexCoord).r;
+      if(tileIndex == 0u) {
+        ${this.OUT_LIMIT_TILE !== null ? `tileIndex = ${this.OUT_LIMIT_TILE}u;` : 'discard;'}
+      }
     }
     
     float tx = fract(worldX);
@@ -807,7 +825,7 @@ void main() {
     float spriteWidth = 1.0 / u_spriteCount;
     vec2 uv = vec2(v_texCoord.x * spriteWidth, fract(v_texCoord.y));
     
-    // ✅ AÑADIR ESTA LÍNEA - Invertir coordenada Y
+    // Invertir coordenada Y
     uv.y = 1.0 - uv.y;
     
     uv.x += float(u_spriteIndex - 1) * spriteWidth;
@@ -1415,41 +1433,48 @@ void main() {
     const maxDistSq = this.MAX_RENDER_DISTANCE * this.MAX_RENDER_DISTANCE;
 
     const maxDist = this.MAX_RENDER_DISTANCE;
-    const minX = Math.max(0, Math.floor(camX - maxDist));
-    const maxX = Math.min(this.MAP_WIDTH - 1, Math.ceil(camX + maxDist));
-    const minY = Math.max(0, Math.floor(camY - maxDist));
-    const maxY = Math.min(this.MAP_HEIGHT - 1, Math.ceil(camY + maxDist));
+    const minX = Math.max(this.OUT_LIMIT_TILE !== null ? -Infinity : 0, Math.floor(camX - maxDist));
+    const maxX = Math.min(this.OUT_LIMIT_TILE !== null ? Infinity : this.MAP_WIDTH - 1, Math.ceil(camX + maxDist));
+    const minY = Math.max(this.OUT_LIMIT_TILE !== null ? -Infinity : 0, Math.floor(camY - maxDist));
+    const maxY = Math.min(this.OUT_LIMIT_TILE !== null ? Infinity : this.MAP_HEIGHT - 1, Math.ceil(camY + maxDist));
 
     const billboardCache = new Map();
 
     if (this.tileMap) {
       for (let mapY = minY; mapY <= maxY; mapY++) {
         for (let mapX = minX; mapX <= maxX; mapX++) {
-          const i = mapY * this.MAP_WIDTH + mapX;
-          const tile = this.tileMap[i];
-          if (tile === 0) continue;
+          const outOfBounds = mapX < 0 || mapY < 0 || mapX >= this.MAP_WIDTH || mapY >= this.MAP_HEIGHT;
+          let tile;
+          if (outOfBounds) {
+            if (this.OUT_LIMIT_TILE === null) continue;
+            tile = this.OUT_LIMIT_TILE;
+          } else {
+            const i = mapY * this.MAP_WIDTH + mapX;
+            tile = this.tileMap[i];
+            if (tile === 0) continue;
+          }
 
           const worldX = mapX + 0.5;
           const worldY = mapY + 0.5;
           const dx = worldX - camX;
           const dy = worldY - camY;
-          const distSq = dx * dx + dy * dy;
 
-          if (distSq > maxDistSq) continue;
-
+          // 1. Descartar lo que está detrás (barato, sin multiplicaciones)
           const rotY = dx * this.cachedSinA + dy * this.cachedCosA;
           if (rotY < 0.1) continue;
 
+          // 2. Descartar fuera del frustum lateral
           const rotX = dx * this.cachedCosA - dy * this.cachedSinA;
           const screenX = 0.5 + rotX / rotY;
-          if (
-            screenX < -this.FRUSTUM_MARGIN ||
-            screenX > 1.0 + this.FRUSTUM_MARGIN
-          )
+          if (screenX < -this.FRUSTUM_MARGIN || screenX > 1.0 + this.FRUSTUM_MARGIN)
             continue;
 
-          const heightMapValue = this.heightMap
-            ? this.heightMap[i] || 0.0
+          // 3. Descartar por distancia (más caro, solo si pasó los anteriores)
+          const distSq = dx * dx + dy * dy;
+          if (distSq > maxDistSq) continue;
+
+          const heightMapValue = (!outOfBounds && this.heightMap)
+            ? this.heightMap[mapY * this.MAP_WIDTH + mapX] || 0.0
             : 0.0;
 
           // Procesar modelos 3D
@@ -1478,7 +1503,7 @@ void main() {
                   if (modelHeight - baseHeight === 1) {
                     // Crear bloques base (desde 0 hasta baseHeight)
                     if (baseHeight > 0) {
-                      this.tempObjects[this.objectCount++] = {
+                      this._pushObject({
                         type: "block",
                         x: worldX,
                         y: 0.0,
@@ -1486,11 +1511,11 @@ void main() {
                         tile: groundTile,
                         dist: distSq,
                         customHeight: baseHeight,
-                      };
+                      });
                     }
 
                     // Crear rampa en el tope
-                    this.tempObjects[this.objectCount++] = {
+                    this._pushObject({
                       type: "ramp",
                       x: worldX,
                       y: baseHeight,
@@ -1500,10 +1525,10 @@ void main() {
                       rampInfo: rampInfo,
                       baseHeight: baseHeight,
                       targetHeight: modelHeight,
-                    };
+                    });
 
                     // Añadir el modelo DESPUÉS de la rampa
-                    this.tempObjects[this.objectCount++] = {
+                    this._pushObject({
                       type: "model3d",
                       modelName: config.modelName,
                       x: worldX + offset.x,
@@ -1513,7 +1538,7 @@ void main() {
                       scale: config.scale || 1.0,
                       rotation: config.rotation || { x: 0, y: 0, z: 0 },
                       dist: distSq,
-                    };
+                    });
 
                     continue;
                   }
@@ -1521,7 +1546,7 @@ void main() {
               }
 
               // Si no es rampa, crear bloque completo desde 0 hasta modelHeight
-              this.tempObjects[this.objectCount++] = {
+              this._pushObject({
                 type: "block",
                 x: worldX,
                 y: 0.0,
@@ -1529,10 +1554,10 @@ void main() {
                 tile: groundTile,
                 dist: distSq,
                 customHeight: modelHeight,
-              };
+              });
 
               // Añadir el modelo EN LA ALTURA CORRECTA
-              this.tempObjects[this.objectCount++] = {
+              this._pushObject({
                 type: "model3d",
                 modelName: config.modelName,
                 x: worldX + offset.x,
@@ -1542,10 +1567,10 @@ void main() {
                 scale: config.scale || 1.0,
                 rotation: config.rotation || { x: 0, y: 0, z: 0 },
                 dist: distSq,
-              };
+              });
             } else {
               // Si NO hay altura, modelo al nivel del suelo
-              this.tempObjects[this.objectCount++] = {
+              this._pushObject({
                 type: "model3d",
                 modelName: config.modelName,
                 x: worldX + offset.x,
@@ -1555,7 +1580,7 @@ void main() {
                 scale: config.scale || 1.0,
                 rotation: config.rotation || { x: 0, y: 0, z: 0 },
                 dist: distSq,
-              };
+              });
             }
 
             continue;
@@ -1586,7 +1611,7 @@ void main() {
                 const targetHeight = groundElevation;
                 if (targetHeight - baseHeight === 1) {
                   if (baseHeight > 0) {
-                    this.tempObjects[this.objectCount++] = {
+                    this._pushObject({
                       type: "block",
                       x: worldX,
                       y: 0.0,
@@ -1594,10 +1619,10 @@ void main() {
                       tile: groundTile,
                       dist: distSq,
                       customHeight: baseHeight,
-                    };
+                    });
                   }
 
-                  this.tempObjects[this.objectCount++] = {
+                  this._pushObject({
                     type: "ramp",
                     x: worldX,
                     y: baseHeight,
@@ -1607,7 +1632,7 @@ void main() {
                     rampInfo: rampInfo,
                     baseHeight: baseHeight,
                     targetHeight: groundElevation,
-                  };
+                  });
                   groundIsRamp = true;
                   finalGroundHeight = groundElevation;
                 }
@@ -1615,7 +1640,7 @@ void main() {
             }
 
             if (!groundIsRamp && groundElevation > 0 && groundTile !== 0) {
-              this.tempObjects[this.objectCount++] = {
+              this._pushObject({
                 type: "block",
                 x: worldX,
                 y: 0.0,
@@ -1623,7 +1648,7 @@ void main() {
                 tile: groundTile,
                 dist: distSq,
                 customHeight: groundElevation,
-              };
+              });
               const blockHeight = this.isBlock(groundTile)
                 ? this.tile_heights[groundTile] || 0.0
                 : 0.0;
@@ -1659,7 +1684,7 @@ void main() {
 
               const scale = this.billboard_scales[tile] || 1.0;
 
-              this.tempObjects[this.objectCount++] = {
+              this._pushObject({
                 type: "billboard",
                 x: worldX,
                 y: worldY,
@@ -1667,7 +1692,7 @@ void main() {
                 dist: distSq,
                 proj,
                 scale: scale,
-              };
+              });
             }
           }
           // Procesar bloques
@@ -1689,7 +1714,7 @@ void main() {
 
                 if (targetHeight - baseHeight === 1) {
                   if (baseHeight > 0) {
-                    this.tempObjects[this.objectCount++] = {
+                    this._pushObject({
                       type: "block",
                       x: worldX,
                       y: 0.0,
@@ -1697,10 +1722,10 @@ void main() {
                       tile,
                       dist: distSq,
                       customHeight: baseHeight,
-                    };
+                    });
                   }
 
-                  this.tempObjects[this.objectCount++] = {
+                  this._pushObject({
                     type: "ramp",
                     x: worldX,
                     y: baseHeight,
@@ -1710,7 +1735,7 @@ void main() {
                     rampInfo,
                     baseHeight,
                     targetHeight,
-                  };
+                  });
 
                   continue;
                 }
@@ -1718,7 +1743,7 @@ void main() {
             }
 
             const customHeight = heightMapValue > 0 ? heightMapValue : null;
-            this.tempObjects[this.objectCount++] = {
+            this._pushObject({
               type: "block",
               x: worldX,
               y: 0.0,
@@ -1726,7 +1751,7 @@ void main() {
               tile,
               dist: distSq,
               customHeight: customHeight,
-            };
+            });
           }
           // Procesar tiles de suelo
           else {
@@ -1748,7 +1773,7 @@ void main() {
 
                   if (targetHeight - baseHeight === 1) {
                     if (baseHeight > 0) {
-                      this.tempObjects[this.objectCount++] = {
+                      this._pushObject({
                         type: "block",
                         x: worldX,
                         y: 0.0,
@@ -1756,10 +1781,10 @@ void main() {
                         tile,
                         dist: distSq,
                         customHeight: baseHeight,
-                      };
+                      });
                     }
 
-                    this.tempObjects[this.objectCount++] = {
+                    this._pushObject({
                       type: "ramp",
                       x: worldX,
                       y: baseHeight,
@@ -1769,14 +1794,14 @@ void main() {
                       rampInfo,
                       baseHeight,
                       targetHeight,
-                    };
+                    });
 
                     continue;
                   }
                 }
               }
 
-              this.tempObjects[this.objectCount++] = {
+              this._pushObject({
                 type: "block",
                 x: worldX,
                 y: 0.0,
@@ -1784,7 +1809,7 @@ void main() {
                 tile: tile,
                 dist: distSq,
                 customHeight: heightMapValue,
-              };
+              });
             }
           }
         }
@@ -1857,7 +1882,7 @@ void main() {
               ? obj.scale
               : this.billboard_scales[obj.tile] || 1.0;
 
-          this.tempObjects[this.objectCount++] = {
+          this._pushObject({
             type: "billboard",
             x: worldX,
             y: worldY,
@@ -1865,19 +1890,19 @@ void main() {
             dist: distSq,
             proj,
             scale: scale,
-          };
+          });
         }
       } else if (this.isBlock(obj.tile)) {
-        this.tempObjects[this.objectCount++] = {
+        this._pushObject({
           type: "block",
           x: worldX,
           y: height,
           z: worldY,
           tile: obj.tile,
           dist: distSq,
-        };
+        });
       } else if (obj.type === "model3d") {
-        this.tempObjects[this.objectCount++] = {
+        this._pushObject({
           type: "model3d",
           modelName: obj.modelName,
           x: worldX,
@@ -1887,7 +1912,7 @@ void main() {
           scale: obj.scale || 1.0,
           rotation: obj.rotation || { x: 0, y: 0, z: 0 },
           dist: distSq,
-        };
+        });
       }
     }
 
@@ -2527,7 +2552,7 @@ render(independentObjects = [], renderSky = true) {
 
   const allObjects = this.collectRenderableObjects(
     camera,
-    independentObjects.flat(2)
+    independentObjects.length ? independentObjects.flat(2) : this._flatIndependentObjects
   );
 
   this.gl.enable(this.gl.DEPTH_TEST);
@@ -2541,11 +2566,9 @@ render(independentObjects = [], renderSky = true) {
   // ❌ ELIMINAR: let currentModelName = null;
   // ❌ ELIMINAR: let modelBatch = [];
 
-  for (const obj of allObjects) {
+  for (let i = 0; i < allObjects.length; i++) {
+    const obj = allObjects[i];
     if (obj.type === "block") {
-      // ✅ Dibujar modelos 3D pendientes individualmente
-      // (ya no hay batch)
-      
       // Agrupar bloques
       if (currentBlockTile === obj.tile) {
         blockBatch.push(obj);
@@ -2557,18 +2580,17 @@ render(independentObjects = [], renderSky = true) {
         blockBatch = [obj];
       }
     } else if (obj.type === "model3d") {
-      // ✅ Dibujar bloques pendientes
+      // Dibujar bloques pendientes
       if (blockBatch.length > 0) {
         this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
         blockBatch = [];
         currentBlockTile = null;
       }
 
-      // ✅ CAMBIO: Renderizar cada modelo individualmente
       this.drawSingleModel3D(obj, camera);
-      
+
     } else if (obj.type === "billboard") {
-      // Dibujar pendientes
+      // Dibujar bloques pendientes
       if (blockBatch.length > 0) {
         this.drawBlocksInstanced(currentBlockTile, blockBatch, camera);
         blockBatch = [];
@@ -2579,24 +2601,16 @@ render(independentObjects = [], renderSky = true) {
       this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
       this.gl.depthMask(false);
 
+      // Agrupar billboards del mismo tile sin indexOf ni splice
       const billboardBatch = [obj];
-      let nextIndex = allObjects.indexOf(obj) + 1;
-
-      while (nextIndex < allObjects.length) {
-        const nextObj = allObjects[nextIndex];
-        if (nextObj.type === "billboard" && nextObj.tile === obj.tile) {
-          billboardBatch.push(nextObj);
-          nextIndex++;
-        } else {
-          break;
-        }
+      while (i + 1 < allObjects.length &&
+             allObjects[i + 1].type === "billboard" &&
+             allObjects[i + 1].tile === obj.tile) {
+        i++;
+        billboardBatch.push(allObjects[i]);
       }
 
       this.drawBillboardsInstanced(obj.tile, billboardBatch);
-      allObjects.splice(
-        allObjects.indexOf(obj) + 1,
-        billboardBatch.length - 1
-      );
 
       this.gl.depthMask(true);
       this.gl.disable(this.gl.BLEND);
@@ -2841,8 +2855,10 @@ getRampType(x, y, currentHeight) {
   if (highSides.length + lowSides.length === 0)
     return { type: this.RAMP_TYPES.NONE };
 
-  // ✅ CAMBIO: Permitir lados bajos en rampas rectas (bordes)
-  if (highSides.length === 1) {  // <- Eliminar && lowSides.length === 0
+  const opposite = { north: "south", south: "north", east: "west", west: "east" };
+
+  // Rampa recta: hay un lado alto
+  if (highSides.length === 1) {
     return {
       type: this.RAMP_TYPES.STRAIGHT,
       direction: highSides[0],
@@ -2850,17 +2866,17 @@ getRampType(x, y, currentHeight) {
     };
   }
 
-  // Rampa descendente (sin cambios por ahora)
+  // Rampa recta: solo hay un lado bajo → convertir a highSide opuesto
   if (lowSides.length === 1 && highSides.length === 0) {
     return {
       type: this.RAMP_TYPES.STRAIGHT,
-      direction: lowSides[0],
-      ascending: false,
+      direction: opposite[lowSides[0]],
+      ascending: true,
     };
   }
 
-  // Esquinas exteriores - también flexibilizar
-  if (highSides.length === 2) {  // <- Eliminar && lowSides.length === 0
+  // Esquina exterior: dos lados altos adyacentes
+  if (highSides.length === 2) {
     const adjacent = this.areAdjacent(highSides[0], highSides[1]);
     if (adjacent) {
       return {
@@ -2871,14 +2887,15 @@ getRampType(x, y, currentHeight) {
     }
   }
 
-  // Esquinas interiores (mantener estricto)
+  // Esquina interior: dos lados bajos adyacentes → convertir a highSides opuestos
   if (lowSides.length === 2 && highSides.length === 0) {
     const adjacent = this.areAdjacent(lowSides[0], lowSides[1]);
     if (adjacent) {
+      const oppositeHighSides = lowSides.map(d => opposite[d]);
       return {
         type: this.RAMP_TYPES.INNER_CORNER,
-        corner: this.getCornerName(lowSides),
-        ascending: false,
+        corner: this.getCornerName(oppositeHighSides),
+        ascending: true,
       };
     }
   }
@@ -2948,10 +2965,10 @@ getStraightRampVertices(direction, ascending) {
   // north = sube hacia Y-, east = sube hacia X+, south = sube hacia Y+, west = sube hacia X-
   
 const rotations = {
-  north: 180,    // ←bien
-  east: 270,    // ← Cambiar
-  south: 0,  // ← Cambiar
-  west: 90    // ← Cambiar
+  north: 0,
+  east: 90,
+  south: 180,
+  west: 270
 };
   
   const angle = (rotations[direction] || 0) * Math.PI / 180;
@@ -3427,14 +3444,6 @@ getOuterCornerRampVertices(corner, ascending) {
       customHeight: options.height || null,
     };
   }
-  //metodo para invertir un array:
-  flipMapX(map) {
-  const flipped = new Array(map.length);
-  for (let y = 0; y < this.MAP_HEIGHT; y++)
-    for (let x = 0; x < this.MAP_WIDTH; x++)
-      flipped[y * this.MAP_WIDTH + x] = map[y * this.MAP_WIDTH + (this.MAP_WIDTH - 1 - x)];
-      return flipped;
-    }
 
   //metodo auxiliar para pasar de rgb a 0/1
   normalizeColor(c) {
