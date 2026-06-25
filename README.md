@@ -94,8 +94,8 @@ const config = {
     2: 1,
     3: 1
   },
-  defaultBillboardGround: 0,   // Tile por defecto (0 = sin suelo)
-  
+  defaultBillboardGround: 0,   // Tile por defecto del billboard (0 = sin suelo)
+  out_limit_tile: 3,  //Tile por defecto cuando la camara está fuera de mapa  
   // === MODELOS 3D ===
   model3dTiles: [10, 11],      // IDs de tiles que usan modelos .obj
   model3dConfig: {
@@ -471,6 +471,8 @@ model3dConfig: {
     height: 0,              // Usa heightMap
     offset: { x: 0, y: 0.5, z: 0 },
     groundTile: 1           // Grass debajo
+    tileRepeat: true, // si queremos que en vez de expandir la textura del OBJ se ponga en mosaico
+    tileScale: 2.0, //si tenemos activado tileRepeat, la escala de la textura
   },
   11: {
     modelName: 'rock',
@@ -478,6 +480,9 @@ model3dConfig: {
     rotation: { x: 0, y: 0, z: 0 },
     height: 1,              // Altura fija de 1
     groundTile: 5           // Bloque de piedra debajo
+    tileRepeat: true, // si queremos que en vez de expandir la textura del OBJ se ponga en mosaico
+    tileScale: 2.0, //si tenemos activado tileRepeat, la escala de la textura
+
   }
 }
 ```

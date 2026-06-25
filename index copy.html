@@ -117,14 +117,8 @@ const MAP_HEIGHT = 40;
 </script>
 
 <script src="mapa_isla.js"></script>
-<script src="collision.js"></script>
 <script src="glitter7engine.js"></script>
-<script src="camera.js"></script>
-<script src="print_text.js"></script>
 
-
-<script src="controls.js"></script>
-<script src="playermodel3d.js"></script>
 
 <script>
   /*<script src="player2.js"><script>*/
@@ -145,7 +139,7 @@ const engine = new Glitter7engine(canvas, {
       rotation: { x: 1.5, y: Math.PI / 4, z: 0 },
      // height: 0,  // Altura base (o usa heightMap)
       offset: { x: 0, y: -0.2, z: 12 },  // Ajustar posición para centrar
-      groundTile: 1  // Tile 5 como suelo debajo del árbol
+      groundTile: 1,  // Tile 5 como suelo debajo del árbol
     },
      9: {
       modelName: 'deer',
@@ -153,7 +147,8 @@ const engine = new Glitter7engine(canvas, {
       rotation: { x: 0, y: 0, z: 0 },
      // height: 0,  // Altura base (o usa heightMap)
     //  offset: { x: 0, y: 0.3, z: 0 },  // Ajustar posición para centrar
-      groundTile: 1  // Tile 5 como suelo debajo del árbol
+      groundTile: 1,  // Tile 5 como suelo debajo del árbol
+      tileRepeat: true
     },
 
   },
@@ -251,45 +246,34 @@ const independentObjects = [
   ,
   fx
   ,  
-  engine.createModelInstance('cat', 124, 103, 5, { 
+  engine.createModelInstance('cat', 124, 103, 1, { 
     scale: 2.15, 
-    tile: 48,
-    rotation: { x: 1.5, y: 0, z: 0 }
+    tile: 5,
+    rotation: { x: 1.5, y: 0, z: 0 },
+    tileRepeat: true,
+    tileScale: 2.0,
   })
 ];
-
-let player = initPlayer(playerObject, tileMap, independentObjects);
-//applyMovementPreset('REALISTIC');
-
-//cargar fuente
-const font_img = new Image();
-  font_img.src = 'img/font.png';
-const gui = new Image();
-  gui.src = 'img/gui.png';
-
+engine.camera = { x: 92.09999999999904, y: 85.49999999999943, z: 1.9, angle: 3.1999999999999966 }
 // Loop de render
 function gameLoop() {
-  //engine.render(independentObjects, true);
-  render();
-  updatePlayer(player, keys);
-  updateCamera();
-  
+
+  if (keys.w) engine.camera.y -= 0.1;
+  if (keys.s) engine.camera.y += 0.1;
+  if (keys.a) engine.camera.x -= 0.1;
+  if (keys.d) engine.camera.x += 0.1;
+  if (keys.o) engine.camera.z += 0.1;
+  if (keys.l) engine.camera.z -= 0.1;
+  if (keys.e) engine.camera.angle -= 0.05;
+  if (keys.q) engine.camera.angle += 0.05;
+
+  engine.render(independentObjects, true); 
   requestAnimationFrame(gameLoop);
 }
 
 
-function render(){
-  engine.render(independentObjects, true);
-}
-
 gameLoop();
 
-function updateCamera() {
-  updatePlayerCamera(engine.camera, player);
- // player.angle = 9.5
-}
-
-// Función auxiliar para pasar a base64 las imágenes
 function imageToBase64(url, callback) {
   const img = new Image();
   img.crossOrigin = "Anonymous";
@@ -304,6 +288,8 @@ function imageToBase64(url, callback) {
   };
   img.src = url;
 }
+
+
 </script>
 </body>
 </html>

@@ -305,15 +305,16 @@ class Glitter7engine {
   
   uniform vec4 u_camera;
   uniform vec2 u_resolution;
-  uniform vec3 u_modelPos;      // Posición del modelo
-  uniform float u_modelScale;   // Escala uniforme
-  uniform vec3 u_modelRotation; // Rotación en radianes (x, y, z)
+  uniform vec3 u_modelPos;
+  uniform float u_modelScale;
+  uniform vec3 u_modelRotation;
   
   out vec2 v_texCoord;
   out float v_depth;
   out vec3 v_normal;
   out vec3 v_worldPos;
-  
+  out vec3 v_worldPosRaw; // ✅ NUEVO: posición local escalada para tileRepeat
+
 mat4 rotationMatrix(vec3 rotation) {
     float cx = cos(rotation.x);
     float sx = sin(rotation.x);
@@ -322,42 +323,21 @@ mat4 rotationMatrix(vec3 rotation) {
     float cz = cos(rotation.z);
     float sz = sin(rotation.z);
     
-    mat4 rx = mat4(
-      1.0, 0.0, 0.0, 0.0,
-      0.0, cx, -sx, 0.0,
-      0.0, sx, cx, 0.0,
-      0.0, 0.0, 0.0, 1.0
-    );
-    
-    mat4 ry = mat4(
-      cy, 0.0, sy, 0.0,
-      0.0, 1.0, 0.0, 0.0,
-      -sy, 0.0, cy, 0.0,
-      0.0, 0.0, 0.0, 1.0
-    );
-    
-    mat4 rz = mat4(
-      cz, -sz, 0.0, 0.0,
-      sz, cz, 0.0, 0.0,
-      0.0, 0.0, 1.0, 0.0,
-      0.0, 0.0, 0.0, 1.0
-    );
-    
-    // Orden corregido: Y -> X -> Z para rotación más predecible
+    mat4 rx = mat4(1.0,0.0,0.0,0.0, 0.0,cx,-sx,0.0, 0.0,sx,cx,0.0, 0.0,0.0,0.0,1.0);
+    mat4 ry = mat4(cy,0.0,sy,0.0, 0.0,1.0,0.0,0.0, -sy,0.0,cy,0.0, 0.0,0.0,0.0,1.0);
+    mat4 rz = mat4(cz,-sz,0.0,0.0, sz,cz,0.0,0.0, 0.0,0.0,1.0,0.0, 0.0,0.0,0.0,1.0);
     return ry * rx * rz;
   }
   
   void main() {
-    // Aplicar rotación y escala
     mat4 rotMat = rotationMatrix(u_modelRotation);
     vec3 rotatedPos = (rotMat * vec4(a_position, 1.0)).xyz;
     vec3 scaledPos = rotatedPos * u_modelScale;
     
-    // Posición en el mundo
     vec3 worldPos = scaledPos + u_modelPos;
     v_worldPos = worldPos;
+    v_worldPosRaw = scaledPos; // ✅ NUEVO: posición local para el triplanar mapping
     
-    // Proyección de cámara
     float dx = worldPos.x - u_camera.x;
     float dy = worldPos.z - u_camera.y;
     
@@ -401,6 +381,7 @@ mat4 rotationMatrix(vec3 rotation) {
   in float v_depth;
   in vec3 v_normal;
   in vec3 v_worldPos;
+  in vec3 v_worldPosRaw;       // ✅ NUEVO
   out vec4 outColor;
   
   uniform sampler2D u_spritesheet;
@@ -415,63 +396,76 @@ mat4 rotationMatrix(vec3 rotation) {
   uniform float u_fogEnd;
   uniform vec3 u_fogColor;
   uniform vec4 u_camera;
-  
+  uniform bool u_tileRepeat;   // ✅ NUEVO: activa modo mosaico (como los bloques)
+  uniform float u_tileScale;   // ✅ NUEVO: escala del mosaico (1.0 = 1 tile/unidad)
+
   float calculateAO() {
     vec3 localPos = fract(v_worldPos);
     float heightFactor = smoothstep(0.0, 0.4, localPos.y);
     float ao = mix(0.8, 1.0, heightFactor);
-    
-    if (abs(v_normal.y) < 0.3) {
-      ao *= 0.93;
-    }
-    else if (v_normal.y > 0.9) {
-      ao = 1.0;
-    }
-    
+    if (abs(v_normal.y) < 0.3) { ao *= 0.93; }
+    else if (v_normal.y > 0.9) { ao = 1.0; }
     return ao;
   }
   
-void main() {
-  if (v_depth < 0.0) discard;
-  
-  float spriteWidth = 1.0 / u_spriteCount;
-  vec2 uv = v_texCoord;
-  uv.y = 1.0 - uv.y;
-  // DEBUG: Visualizar las coordenadas UV
-   //outColor = vec4(uv.x, uv.y, 0.0, 1.0);
-   //return;
-  
-  uv.x = uv.x * spriteWidth;
-  uv.x += float(u_spriteIndex - 1) * spriteWidth;
-  
-  vec4 color = texture(u_spritesheet, uv);
-  if (color.a < 0.1) discard;
+  void main() {
+    if (v_depth < 0.0) discard;
+    
+    float spriteWidth = 1.0 / u_spriteCount;
+    vec2 uv;
+    
+    if (u_tileRepeat) {
+      // ✅ NUEVO: Triplanar mapping — proyecta la textura en los 3 planos del espacio
+      // local del modelo, igual que los bloques. La cara dominante (por normal)
+      // elige el plano XZ, ZY o XY para obtener el efecto mosaico.
+      vec3 absNormal = abs(v_normal);
+      vec3 sp = v_worldPosRaw * u_tileScale;
 
-    // DEBUG: Visualizar las coordenadas UV
-   //outColor = vec4(uv.x, uv.y, 0.0, 1.0);
-   //return;
+      if (absNormal.y >= absNormal.x && absNormal.y >= absNormal.z) {
+        // Cara horizontal (suelo / techo)
+        uv = fract(sp.xz);
+      } else if (absNormal.x >= absNormal.z) {
+        // Cara lateral en X
+        uv = fract(sp.zy);
+        uv.y = 1.0 - uv.y;
+      } else {
+        // Cara lateral en Z
+        uv = fract(sp.xy);
+        uv.y = 1.0 - uv.y;
+      }
+    } else {
+      // Modo normal: UVs del archivo OBJ
+      uv = v_texCoord;
+      uv.y = 1.0 - uv.y;
+    }
+
+    // Aplicar sprite del atlas
+    uv.x = uv.x * spriteWidth + float(u_spriteIndex - 1) * spriteWidth;
+    
+    vec4 color = texture(u_spritesheet, uv);
+    if (color.a < 0.1) discard;
   
-  vec3 finalColor = color.rgb;
-  
-  float ao = calculateAO();
-  finalColor *= ao;
-  
-  if (u_illumination) {
-    float diffuseLight = max(dot(normalize(v_normal), u_lightDir), 0.0);
-    float lighting = u_ambient + diffuseLight * u_diffuse;
-    finalColor *= lighting;
+    vec3 finalColor = color.rgb;
+    float ao = calculateAO();
+    finalColor *= ao;
+    
+    if (u_illumination) {
+      float diffuseLight = max(dot(normalize(v_normal), u_lightDir), 0.0);
+      float lighting = u_ambient + diffuseLight * u_diffuse;
+      finalColor *= lighting;
+    }
+    
+    if (u_fogEnabled) {
+      float heightFactor = 1.0 - clamp(u_camera.z / 10.0, 0.0, 1.0);
+      float enhancedFogEnd = u_fogEnd * (1.0 + heightFactor * 0.5);
+      float fogFactor = clamp((enhancedFogEnd - v_depth) / (enhancedFogEnd - u_fogStart), 0.0, 1.0);
+      finalColor = mix(u_fogColor, finalColor, fogFactor);
+    }
+    
+    outColor = vec4(finalColor, color.a);
+  }`;
   }
-  
-  if (u_fogEnabled) {
-    float heightFactor = 1.0 - clamp(u_camera.z / 10.0, 0.0, 1.0);
-    float enhancedFogEnd = u_fogEnd * (1.0 + heightFactor * 0.5);
-    float fogFactor = clamp((enhancedFogEnd - v_depth) / (enhancedFogEnd - u_fogStart), 0.0, 1.0);
-    finalColor = mix(u_fogColor, finalColor, fogFactor);
-  }
-  
-  outColor = vec4(finalColor, color.a);
-}`;
-  }
+
 
   createShader(type, source) {
     const shader = this.gl.createShader(type);
@@ -1125,6 +1119,9 @@ void main() {
         fogStart: this.gl.getUniformLocation(this.modelProgram, "u_fogStart"),
         fogEnd: this.gl.getUniformLocation(this.modelProgram, "u_fogEnd"),
         fogColor: this.gl.getUniformLocation(this.modelProgram, "u_fogColor"),
+        tileRepeat: this.gl.getUniformLocation(this.modelProgram, "u_tileRepeat"),
+        tileScale:  this.gl.getUniformLocation(this.modelProgram, "u_tileScale"),
+
       },
     };
 
@@ -1365,15 +1362,17 @@ void main() {
     return this.model3d_tiles_set.has(n);
   }
 
-  getModel3DConfig(tile) {
+getModel3DConfig(tile) {
     return (
       this.model3d_config[tile] || {
         modelName: "default",
         scale: 1.0,
         rotation: { x: 0, y: 0, z: 0 },
         height: 0,
-        offset: { x: 0, y: 0, z: 0 }, // ← NUEVO: offset para centrar
-        groundTile: 0, // ← NUEVO: tile de suelo (0 = sin suelo)
+        offset: { x: 0, y: 0, z: 0 },
+        groundTile: 0,
+        tileRepeat: false,
+        tileScale: 1.0,   
       }
     );
   }
@@ -1902,18 +1901,20 @@ void main() {
           dist: distSq,
         });
       } else if (obj.type === "model3d") {
-        this._pushObject({
-          type: "model3d",
-          modelName: obj.modelName,
-          x: worldX,
-          y: height,
-          z: worldY,
-          tile: obj.tile,
-          scale: obj.scale || 1.0,
-          rotation: obj.rotation || { x: 0, y: 0, z: 0 },
-          dist: distSq,
-        });
-      }
+          this._pushObject({
+            type: "model3d",
+            modelName: obj.modelName,
+            x: worldX,
+            y: height,
+            z: worldY,
+            tile: obj.tile,
+            scale: obj.scale || 1.0,
+            rotation: obj.rotation || { x: 0, y: 0, z: 0 },
+            dist: distSq,
+            tileRepeat: obj.tileRepeat ?? false,  // ✅
+            tileScale:  obj.tileScale  ?? 1.0,   // ✅
+          });
+        }
     }
 
     const objects = this.tempObjects.slice(0, this.objectCount);
@@ -2633,133 +2634,80 @@ render(independentObjects = [], renderSky = true) {
   this.gl.enable(this.gl.BLEND);
 }
 
-drawSingleModel3D(modelObj, camera) {
-  const model = this.models3D.get(modelObj.modelName);
-  if (!model) return;
+  drawSingleModel3D(modelObj, camera) {
+    const model = this.models3D.get(modelObj.modelName);
+    if (!model) return;
 
-  this.gl.useProgram(this.modelProgram);
+    this.gl.useProgram(this.modelProgram);
 
-  // Configurar geometría del modelo
-  this.gl.bindBuffer(this.gl.ARRAY_BUFFER, model.buffer);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, model.buffer);
 
-  this.gl.enableVertexAttribArray(this.attribLocations.model.position);
-  this.gl.vertexAttribPointer(
-    this.attribLocations.model.position,
-    3,
-    this.gl.FLOAT,
-    false,
-    32,
-    0
-  );
+    this.gl.enableVertexAttribArray(this.attribLocations.model.position);
+    this.gl.vertexAttribPointer(this.attribLocations.model.position, 3, this.gl.FLOAT, false, 32, 0);
 
-  this.gl.enableVertexAttribArray(this.attribLocations.model.texCoord);
-  this.gl.vertexAttribPointer(
-    this.attribLocations.model.texCoord,
-    2,
-    this.gl.FLOAT,
-    false,
-    32,
-    12
-  );
+    this.gl.enableVertexAttribArray(this.attribLocations.model.texCoord);
+    this.gl.vertexAttribPointer(this.attribLocations.model.texCoord, 2, this.gl.FLOAT, false, 32, 12);
 
-  this.gl.enableVertexAttribArray(this.attribLocations.model.normal);
-  this.gl.vertexAttribPointer(
-    this.attribLocations.model.normal,
-    3,
-    this.gl.FLOAT,
-    false,
-    32,
-    20
-  );
+    this.gl.enableVertexAttribArray(this.attribLocations.model.normal);
+    this.gl.vertexAttribPointer(this.attribLocations.model.normal, 3, this.gl.FLOAT, false, 32, 20);
 
-  // Uniforms
-  this.gl.uniform4f(
-    this.uniformLocations.model.camera,
-    camera.x,
-    camera.y,
-    camera.z,
-    camera.angle
-  );
-  this.gl.uniform2f(
-    this.uniformLocations.model.resolution,
-    this.canvas.width,
-    this.canvas.height
-  );
-  
-  // ✅ Posición y transformación única para este modelo
-  this.gl.uniform3f(
-    this.uniformLocations.model.modelPos,
-    modelObj.x,
-    modelObj.y,
-    modelObj.z
-  );
-  this.gl.uniform1f(
-    this.uniformLocations.model.modelScale,
-    modelObj.scale || 1.0
-  );
-  
-  const rotation = modelObj.rotation || { x: 0, y: 0, z: 0 };
-  this.gl.uniform3f(
-    this.uniformLocations.model.modelRotation,
-    rotation.x,
-    rotation.y,
-    rotation.z
-  );
-  
-  this.gl.uniform1i(
-    this.uniformLocations.model.spriteIndex,
-    modelObj.tile
-  );
-  this.gl.uniform1f(
-    this.uniformLocations.model.spriteCount,
-    this.tile_items_size
-  );
+    this.gl.uniform4f(this.uniformLocations.model.camera, camera.x, camera.y, camera.z, camera.angle);
+    this.gl.uniform2f(this.uniformLocations.model.resolution, this.canvas.width, this.canvas.height);
+    this.gl.uniform3f(this.uniformLocations.model.modelPos, modelObj.x, modelObj.y, modelObj.z);
+    this.gl.uniform1f(this.uniformLocations.model.modelScale, modelObj.scale || 1.0);
 
-  // Iluminación
-  this.gl.uniform1i(
-    this.uniformLocations.model.illumination,
-    this.ILLUMINATION
-  );
-  this.gl.uniform1f(this.uniformLocations.model.ambient, this.AMBIENT_LIGHT);
-  this.gl.uniform1f(this.uniformLocations.model.diffuse, this.LIGHT_DIFFUSE);
+    const rotation = modelObj.rotation || { x: 0, y: 0, z: 0 };
+    this.gl.uniform3f(this.uniformLocations.model.modelRotation, rotation.x, rotation.y, rotation.z);
 
-  const len = Math.sqrt(
-    this.lightDir[0] * this.lightDir[0] +
-      this.lightDir[1] * this.lightDir[1] +
-      this.lightDir[2] * this.lightDir[2]
-  );
-  this.gl.uniform3f(
-    this.uniformLocations.model.lightDir,
-    this.lightDir[0] / len,
-    this.lightDir[1] / len,
-    this.lightDir[2] / len
-  );
+    this.gl.uniform1i(this.uniformLocations.model.spriteIndex, modelObj.tile);
+    this.gl.uniform1f(this.uniformLocations.model.spriteCount, this.tile_items_size);
 
-  // Textura
-  this.gl.activeTexture(this.gl.TEXTURE0);
-  this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
-  this.gl.uniform1i(this.uniformLocations.model.spritesheet, 0);
+    // Iluminación
+    this.gl.uniform1i(this.uniformLocations.model.illumination, this.ILLUMINATION);
+    this.gl.uniform1f(this.uniformLocations.model.ambient, this.AMBIENT_LIGHT);
+    this.gl.uniform1f(this.uniformLocations.model.diffuse, this.LIGHT_DIFFUSE);
 
-  // Niebla
-  this.gl.uniform1i(this.uniformLocations.model.fogEnabled, this.FOG_ENABLED);
-  this.gl.uniform1f(this.uniformLocations.model.fogStart, this.FOG_START);
-  this.gl.uniform1f(this.uniformLocations.model.fogEnd, this.FOG_END);
-  this.gl.uniform3f(
-    this.uniformLocations.model.fogColor,
-    this.FOG_COLOR[0],
-    this.FOG_COLOR[1],
-    this.FOG_COLOR[2]
-  );
+    const len = Math.sqrt(
+      this.lightDir[0] ** 2 + this.lightDir[1] ** 2 + this.lightDir[2] ** 2
+    );
+    this.gl.uniform3f(
+      this.uniformLocations.model.lightDir,
+      this.lightDir[0] / len, this.lightDir[1] / len, this.lightDir[2] / len
+    );
 
-  // Dibujar
-  this.gl.drawArrays(this.gl.TRIANGLES, 0, model.vertexCount);
+    // Textura
+    this.gl.activeTexture(this.gl.TEXTURE0);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.spriteTexture);
+    this.gl.uniform1i(this.uniformLocations.model.spritesheet, 0);
 
-  // Limpiar
-  this.gl.disableVertexAttribArray(this.attribLocations.model.position);
-  this.gl.disableVertexAttribArray(this.attribLocations.model.texCoord);
-  this.gl.disableVertexAttribArray(this.attribLocations.model.normal);
-}
+    // Niebla
+    this.gl.uniform1i(this.uniformLocations.model.fogEnabled, this.FOG_ENABLED);
+    this.gl.uniform1f(this.uniformLocations.model.fogStart, this.FOG_START);
+    this.gl.uniform1f(this.uniformLocations.model.fogEnd, this.FOG_END);
+    this.gl.uniform3f(
+      this.uniformLocations.model.fogColor,
+      this.FOG_COLOR[0], this.FOG_COLOR[1], this.FOG_COLOR[2]
+    );
 
+    // ✅ NUEVO: tileRepeat — obtiene la config del tile o del objeto independiente
+    const tileRepeat = modelObj.tileRepeat !== undefined
+      ? modelObj.tileRepeat
+      : (this.model3d_config[modelObj.tile]?.tileRepeat ?? false);
+
+    const tileScale = modelObj.tileScale !== undefined
+      ? modelObj.tileScale
+      : (this.model3d_config[modelObj.tile]?.tileScale ?? 1.0);
+
+    this.gl.uniform1i(this.uniformLocations.model.tileRepeat, tileRepeat ? 1 : 0);
+    this.gl.uniform1f(this.uniformLocations.model.tileScale, tileScale);
+
+    // Dibujar
+    this.gl.drawArrays(this.gl.TRIANGLES, 0, model.vertexCount);
+
+    this.gl.disableVertexAttribArray(this.attribLocations.model.position);
+    this.gl.disableVertexAttribArray(this.attribLocations.model.texCoord);
+    this.gl.disableVertexAttribArray(this.attribLocations.model.normal);
+  }
   // Métodos de utilidad
   toggleIllumination() {
     this.ILLUMINATION = !this.ILLUMINATION;
@@ -3442,6 +3390,8 @@ getOuterCornerRampVertices(corner, ascending) {
       rotation: options.rotation || { x: 0, y: 0, z: 0 },
       tile: options.tile || 1,
       customHeight: options.height || null,
+    tileRepeat: options.tileRepeat ?? false,  // 
+    tileScale:  options.tileScale  ?? 1.0,   //     
     };
   }
 
